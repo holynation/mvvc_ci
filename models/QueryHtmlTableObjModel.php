@@ -659,9 +659,10 @@ class QueryHtmlTableObjModel extends CI_Model
 				if ($i==$currentIndex) {
 					$itemClass ='active page-item';
 				}
+				$start =  ($current > 1) ? ($current * $pageLength) - $pageLength : 0;
 				$end = $current*$pageLength;
 				$result.="<li data-start='$end' data-length='$pageLength' class='$itemClass '>
-				<a class='page-link'> $current</a>
+				<a class='page-link' href='?p_start=".$start."&p_len=".$pageLength."'> $current</a>
 				</li>";
 				// $start = $end;
 			}
@@ -677,9 +678,10 @@ class QueryHtmlTableObjModel extends CI_Model
 				if ($i==$currentIndex) {
 					$itemClass ='page-item active';
 				}
+				$start =  ($current > 1) ? ($current * $pageLength) - $pageLength : 0;
 				$end = $current * $pageLength;
 				$result.="<li data-start='$end' data-length='$pageLength' class='$itemClass '>
-				<a class='page-link'>$current</a>
+				<a class='page-link' href='?p_start=".$start."&p_len=".$pageLength."'>$current</a>
 				</li>";
 				// $start = $end;
 			}
