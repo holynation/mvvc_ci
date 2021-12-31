@@ -7,6 +7,9 @@
 class ModelController extends CI_Controller
 {
 	private $_rootUploadsDirectory = "uploads/";
+	// RULE: date_created comes first,then date_modified or any named date
+	// NOTE: it only accept two diff date,nothing more than that.
+	private $_dateParam = array('company_device'=> array('date_created','date_updated'), 'default' => array('date_created','date_modified'));
 
 	function __construct()
 	{
@@ -19,7 +22,6 @@ class ModelController extends CI_Controller
 		$this->load->model('webSessionManager');
 		$this->load->model('modelControllerCallback');
 		$this->load->model('entities/role');
-		// $this->load->library('hash_created');
 		if ($this->webSessionManager->getCurrentuserProp('user_type')=='admin') {
 			$this->role->checkWritePermission();
 		}
@@ -519,6 +521,21 @@ class ModelController extends CI_Controller
 				}
 			} // ended here
 		}
+
+		// check if date_modified or date_created is part of the entity
+		$labelArray = array_keys($model::$labelArray);
+		$dateLabel = "default";
+		if(array_key_exists($model,$this->_dateParam)){
+			$dateLabel = $this->_dateParam[$model];
+		}
+
+		$dateParam = $this->_dateParam[$dateLabel];
+		if(in_array($dateParam[0], $labelArray)){
+			$parameter[$dateParam[0]] = date('Y-m-d H:i:s');
+		}
+		if(in_array($dateParam[1], $labelArray)){
+			$parameter[$dateParam[1]] = date('Y-m-d H:i:s');
+		}
 		
 		$this->$model->setArray($parameter);
 		if (!$this->validateModel($model,$message)) {
@@ -582,6 +599,18 @@ class ModelController extends CI_Controller
 		$parameter = $this->extractSubset($data,$model);
 		$this->db->trans_begin();
 		if ($this->validateModelData($model,'update',$parameter,$message) ) {
+			// check if date_modified is part of the entity
+			$labelArray = array_keys($model::$labelArray);
+			$dateLabel = "default";
+			if(array_key_exists($model,$this->_dateParam)){
+				$dateLabel = $this->_dateParam[$model];
+			}
+
+			$dateParam = $this->_dateParam[$dateLabel];
+			if(in_array($dateParam[1], $labelArray)){
+				$parameter[$dateParam[1]] = date('Y-m-d H:i:s');
+			}
+
 			$this->$model->setArray($parameter);
 			if (!$this->$model->update($id,$this->db)) {
 				$this->db->trans_rollback();
@@ -596,9 +625,17 @@ class ModelController extends CI_Controller
 				return ;
 			}
 			$data['ID']=$id;
-			if($this->DoAfterInsertion($model,'update',$data,$this->db,$message)){
+			if($this->DoAfterInsertion($model,'update',$data,$this->db,$message,$redirect)){
 				$this->db->trans_commit();
-				$message = empty($message)?'Operation Successful':$message;
+				if($redirect != ''){
+					// echo createJsonMessage('status',true,'message',$redirect);
+					$arr = array();
+					$arr['status'] = true;
+					$arr['message'] = $redirect;
+					echo json_encode($arr); return;
+				}else{
+					$message = empty($message)?'Operation Successful ':$message;
+				}
 				$arr['status'] = true;
 		        $arr['message']= $message;
 		        if($flagAction){
