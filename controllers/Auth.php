@@ -2,32 +2,39 @@
 /**
 * 
 */
-class Auth extends CI_Controller
+namespace App\Controllers;
+
+use App\Models\WebSessionManager;
+use App\Models\User;
+use App\Models\Mailer;
+
+class Auth extends BaseController
 {
 	// I WANNA ADD THE SECURITY CHECK TO SOME MODEL IN THE CODE BASE,USING NERMES THAT I READ IN THE FIREFOX BOOKMARK
-	// I ALSO WANNA LOOK INTO SOME MINOR ISSUE RELATION TO REDIRECTION IN JAVASCRIPT
+
+	private $user;
+	private $webSessionManager;
+	private $mailer;
 
 	function __construct()
 	{
-		parent::__construct();
-		$this->load->model('entities/user');
-		$this->load->model('webSessionManager');
-		$this->load->library('hash_created');
-		$this->load->library('cookie_created');
-		$this->load->helper('cookie');
-		$this->load->model('mailer');
+		helper(['cookie','string']);
+
+		$this->user = new User;
+		$this->webSessionManager = new WebSessionManager;
+		$this->mailer = new Mailer;
 	}
 
 	public function signup($data = ''){
-		$this->load->view('cashback/signup', $data);
+		echo view('signup', $data);
 	}
 
 	public function login($data = ''){
-		$this->load->view('cashback/login', $data );
+		echo view('login', $data );
 	}
 
 	public function forget($data = ''){
-		$this->load->view('cashback/forget_password',$data);
+		echo view('forget_password',$data);
 	}
 
 	public function register(){
@@ -121,7 +128,7 @@ class Auth extends CI_Controller
 			}
 			$find = $this->user->findBoth($username);
 			if($find){
-				$checkPass=$this->hash_created->decode_password(trim($password), $this->user->data()[0]['password']);
+				$checkPass=decode_password(trim($password), $this->user->data()[0]['password']);
 				if(!$checkPass){
 					if ($isAjax) {
 						$arr['status']=false;
@@ -169,7 +176,7 @@ class Auth extends CI_Controller
 					echo json_encode($arr);exit;
 				}else{
 					$this->webSessionManager->setFlashMessage('error','invalid email or password');
-					redirect(base_url('/auth/login'));
+					redirect(base_url('auth/login'));
 				}
 				
 			}
@@ -444,11 +451,12 @@ class Auth extends CI_Controller
 		$this->webSessionManager->logout();
 		$path = $base.$link;
 		// destroying the cookie if exist
+		$config = config('cookie');
 		$id = $this->webSessionManager->getCurrentUserProp('ID');
-		if($this->cookie_created->exists($this->config->item('cookie_name'))){
+		if(has_cookie($config->cookieName)){
         	$this->db->delete('users_session', array('user_id' => $id));
         	// $this->cookie_created->delete($this->config->item('cookie_name'));
-        	delete_cookie($this->config->item('cookie_name'));
+        	delete_cookie($config->cookieName);
         }
 		header("location:$path");exit;
 	}
