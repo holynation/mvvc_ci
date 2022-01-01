@@ -103,7 +103,7 @@ private function admin($page,&$data)
   }
 
   if (!$role->canView($path)) {
-    show_access_denied();exit;
+    echo show_access_denied();exit;
   }
   $data['canView']=$this->adminData->getCanViewPages($role);
 }
@@ -435,7 +435,7 @@ public function customerProfile(&$data)
       $path ="vc/$type/".$model;
 
       if (!$role->canView($path)) {
-        show_access_denied($this->load);exit;
+        echo show_access_denied($this->load);exit;
       }
       $type = ($type == 'create') ? 'add' : $type;
       $this->load->model('custom/adminData');
