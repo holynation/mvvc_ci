@@ -15,6 +15,7 @@ class Auth extends BaseController
 	private $user;
 	private $webSessionManager;
 	private $mailer;
+	private $db;
 
 	function __construct()
 	{
@@ -23,6 +24,7 @@ class Auth extends BaseController
 		$this->user = new User;
 		$this->webSessionManager = new WebSessionManager;
 		$this->mailer = new Mailer;
+		$this->db = db_connect();
 	}
 
 	public function signup($data = ''){
@@ -36,6 +38,8 @@ class Auth extends BaseController
 	public function forget($data = ''){
 		echo view('forget_password',$data);
 	}
+
+	//TODO: FIXING EVERY POST INPUT FOR AUTHENTICATION
 
 	public function register(){
 		if(isset($_POST) && count($_POST) > 0 && !empty($_POST)){
@@ -122,7 +126,7 @@ class Auth extends BaseController
 					return;
 				}else{
 					$this->webSessionManager->setFlashMessage('error','Please fill all field and try again');
-					redirect(base_url('/auth/login'));
+					redirect(base_url('auth/login'));
 				}
 				
 			}
@@ -138,7 +142,7 @@ class Auth extends BaseController
 					}
 					else{
 						$this->webSessionManager->setFlashMessage('error','invalid email or password');
-						redirect(base_url('/auth/login'));
+						redirect(base_url('auth/login'));
 					}
 				}
 				$array = array('username'=>$username,'status'=>1);
@@ -206,8 +210,8 @@ class Auth extends BaseController
 			return;
 		}
 		//this will just generate the token and send to the email address
-		loadClass($this->load,'customer');
-		$customer=$this->customer->getWhere(array('email'=>$email));
+		$customer = loadClass('customer');
+		$customer=$customer->getWhere(array('email'=>$email));
 		$customer = is_array($customer)?$customer[0]:$customer;
 		if (!$customer) {
 			$arr['status'] = false;
@@ -225,10 +229,10 @@ class Auth extends BaseController
 			return;
 		}
 		//save the OTP and send the mail
-		loadClass($this->load,'password_otp');
-		$this->password_otp->otp=$otp;
-		$this->password_otp->customer_id=$customer->ID;
-		if (!$this->password_otp->insert()) {
+		$passwordOtp = loadClass('password_otp');
+		$passwordOtp->otp=$otp;
+		$passwordOtp->customer_id=$customer->ID;
+		if (!$passwordOtp->insert()) {
 			$arr['status'] = false;
 			$arr['message'] = 'an error occured while saving the token';
 			echo json_encode($arr);
@@ -258,8 +262,8 @@ class Auth extends BaseController
 			return;
 		}
 
-		loadClass($this->load,'customer');
-		$customer =$this->customer->getWhere(array('email'=>$email));
+		$customer = loadClass('customer');
+		$customer =$customer->getWhere(array('email'=>$email));
 		$customer = is_array($customer)?$customer[0]:$customer;
 		if (!$customer) {
 			displayJson(false,'sorry, an invalid operation...');
@@ -269,7 +273,7 @@ class Auth extends BaseController
 			displayJson(false,'sorry an invalid code was provided.');
 			return;
 		}
-		$password = $this->hash_created->encode_password($password);
+		$password = encode_password($password);
 		$newUser = $this->user->getWhere(array('user_table_id'=>$customer->ID,'user_type'=>'customer'),$count,0,1,false);
 		if (!$newUser){
 			displayJson(false,"sorry,user can't be verified...");
@@ -282,7 +286,7 @@ class Auth extends BaseController
 			return;		
 		}
 		$customer->disableAllPasswordOTPs();
-		$accSubject = "9jaCashBack Password Recovery Success";
+		$accSubject = "Password Recovery Success";
 		$this->mailer->sendPasswordResetSuccess($customer);
 		displayJson(true,"Your password has been reset! You may now login.");
 		return;
@@ -291,14 +295,15 @@ class Auth extends BaseController
 	private function verifyPasswordOTP($customer,$otp)
 	{
 		// the otp can only last 1hr
-		$otp =$this->db->conn_id->escape_string($otp);
+		$otp =$this->db->escape_string($otp);
 		$query="select * from password_otp where customer_id=? and otp=? and status=0 and timestampdiff(MINUTE,date_created,current_timestamp) <=120 order by ID desc limit 1";
-		$result = $this->db->query($query,array($customer->ID,$otp));
-		$result = $result->result_array();
+		$result = $this->db->query($query,[$customer->ID,$otp]);
+		$result = $result->getResultArray();
 		return $result;
 	}
 
 	// here is where user can go to their mail and use a link to reset mail
+	// trying to change the email being used here
 	public function forgetPassword(){
 		if(isset($_POST) && count($_POST) > 0 && !empty($_POST)){
 			if($_POST['task'] == 'reset'){
