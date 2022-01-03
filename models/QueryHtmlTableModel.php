@@ -3,7 +3,11 @@
 	* this class will be used to generate table using normal query and will also contain action like the other query
 	* will also include paging ability
 	*/
-	class QueryHtmlTableModel extends CI_Model
+	namespace App\Models;
+
+	use CodeIgniter\Model;
+
+	class QueryHtmlTableModel extends Model
 	{	
 		private $uploadedFolderName = 'uploads'; // this name should be constant and not change at all
 		private $defaultPagingLength =50;
@@ -11,12 +15,12 @@
 		public $export=false;
 		protected $foreignKeyEnd='_id';
 		protected $from = 'from';
+		protected $db;
 
 		function __construct()
 		{
-			parent::__construct();
-			$this->load->model('crud');
-			$this->lang->load('table_model');
+			$this->db = db_connect();
+			helper('string');
 		}
 		public function buildOrdinaryTable($data,$action=array(),$header=null){
 			return $this->buildHtmlAndAction($data,$action,$header);
@@ -34,7 +38,7 @@
 		 */
 		public function getHtmlTableWithQuery($query,$queryData=NULL, &$totalLength,$actionArray=array(),$header=null,$paged=true,$lower=0, $length=NULL,$parentModel=null,$excludeArray=array(),$appendForm=array(),$tableAttr=array()){
 			if (empty($query)) {
-				throw new Exception($this->lang->line('no_query'));
+				throw new Exception("You must specify query to be used");
 			}
 			$limit="";
 			$array = array();
@@ -48,13 +52,12 @@
 				$length = (isset($_GET['p_len'])&& is_numeric($_GET['p_len']) )?(int)$_GET['p_len']:$length;
 				if ($length!=NULL && !$this->export) {
 					$limit = " LIMIT $lower,$length ";
-					// $array=array($lower,$length);
 				}
 			}
 
 			//check that the query is a select query and the there an id field specified is query array is not empty
 			if (!empty($actionArray) && ( strpos($query, "ID") ===false || strpos($query, " * ")===false)  && strpos(strtolower($query), "select") ===false) {
-				throw new Exception($this->lang->line('no_select_query'));
+				throw new Exception("The query must be a select query and the an id field must be set");
 			}
 			$query.=$limit;
 			//merge the array
@@ -68,33 +71,31 @@
 			if($parentModel != null){
 				$fieldList = $this->buildDataJoinQuery($query,$queryData,$parentModel,$excludeArray,$onclause,$foreignTable);
 				$joinStatement = $onclause;
-				$dataQuery = "select $fieldList from $parentModel $joinStatement where $parentModel.lecturer_id=? $limit";
+				$dataQuery = "select $fieldList from $parentModel $joinStatement $limit";
 			}else{
 				$dataQuery = $query;
 			}
 
 			//add calculate found rows rule to the query
-
-			// $query=$paged?replaceFirst("select", "select SQL_CALC_FOUND_ROWS ", $query):$query;
 			$dataQuery=$paged?replaceFirst("select", "select SQL_CALC_FOUND_ROWS ", $dataQuery):$dataQuery;
 			$result = $this->db->query($dataQuery,$queryData);
 
 			if ($paged) {
 				$result2 = $this->db->query("SELECT FOUND_ROWS() as totalCount");
-				$result2=$result2->result_array();
+				$result2=$result2->getResultArray();
 				$totalLength=$result2[0]['totalCount']; 
 			}
-			$result = $result->result_array();
+			$result = $result->getResultArray();
 			if ($this->export) {
-				$this->load->model('tableViewModel');
-				$this->tableViewModel->loadExportTable('table_data',$result);
+				$tableViewModel = loadClass('tableViewModel');
+				$tableViewModel->loadExportTable('table_data',$result);
 			}
 			$totalLength= $totalLength?$totalLength:count($result);
 			$extra ='';
 			if ($paged) {
-				$this->load->model('tableViewModel');
+				$tableViewModel = loadClass('tableViewModel');
 				$classname = $this->extractClassnameFromQuery($query);
-				$extra =$this->tableViewModel->generatePagedFooter($totalLength,$lower,$length);
+				$extra =$tableViewModel->generatePagedFooter($totalLength,$lower,$length);
 			}
 			return $this->buildHtmlAndAction($result,$actionArray,$header,$appendForm,$tableAttr).$extra;
 		}
@@ -104,10 +105,10 @@
 				$queryString = '';
 				$data = array();
 				$result = $this->db->query($query,$queryData);
-				$results = $result->result_array();
+				$results = $result->getResultArray();
 				$display='';
 				$foreignVal = '';
-				if($result->num_rows() > 0){
+				if($result->getNumRows() > 0){
 					$fields = array_keys($results[0]);
 					foreach($fields as $key => $val){
 						if(!empty($excludeArray)){
@@ -120,7 +121,7 @@
 							$tablename = substr($val, 0,strlen($val)-strlen($this->foreignKeyEnd));
 							$tablename = strtolower($tablename);
 							if (!class_exists($tablename)) {
-								$this->load->model("entities/$tablename");
+								$tablename = "App\\Entities\\".ucfirst($tablename);
 							}
 							if (isset($tablename::$displayField)) {
 								if (is_array($tablename::$displayField)) {
@@ -132,7 +133,6 @@
 								}
 								else{
 									$display = strtolower($tablename::$tablename).'.'.$tablename::$displayField.' as '.$val;
-									// $display =$tablename::$displayField.' as '.$val;
 								}
 								$foreignTable[]=$tablename;
 								$temp = $parentModel.'.'.$tablename.$this->foreignKeyEnd;
@@ -154,7 +154,7 @@
 
 					}
 				}else{
-					echo $this->lang->line('no_record_found');
+					echo "NO RECORD FOUND";
 				}
 
 				$queryString = implode(",", $data);
@@ -170,9 +170,6 @@
 				$div = $pos - $len;
 				$spaceIndex = strrpos(substr($query,0,$pos), ' ');
 				$this->classname = trim(substr($query, $spaceIndex+1,($pos - ($spaceIndex+1))));
-				if ($this->classname=='std') {
-					$this->classname='student';
-				}
 				return;
 			}
 			//if .id is not present then validate the id is present and get the first string after the from keywork
@@ -183,13 +180,12 @@
 				$from+=strlen("from") + 1;
 
 				$classname = substr($query,$from,strpos($query, ' ',$from) -$from);
-				// echo "testing showng classname check file. $classname";exit;
 				$this->classname = $classname;
 			}
 		}
 		private function buildHtmlAndAction($data,$action,$header=null,$appendForm=array(),$tableAttr = array()){
 			if (empty($data)) {
-				return "<div class='empty-data alert alert-primary text-dark'>" .$this->lang->line('no_record_found') . "</div>";	
+				return "<div class='empty-data alert alert-primary text-dark'>NO RECORD FOUND</div>";	
 			}
 			$result = $this->openTableTag($tableAttr);
 			$result.= $this->extractheader(empty($header)?array_keys($data[0]):$header,!empty($action),$appendForm);
@@ -199,7 +195,6 @@
 		}
 		private function openTableTag($tableAttr=array()){
 			$attr = (!empty($tableAttr)) ? attrToString($tableAttr) : "";
-			// print_r($attr);exit;
 			return "<div class=\"box\"><div class=\"table-responsive no-padding\"><table $attr class='table table-bordered'>\n";
 		}
 		private function extractheader($keys,$includeAction=true,$appendForm=array()){
@@ -213,12 +208,9 @@
 				$emptyHeader = "<th></th>";
 			}
 
-			// $sn = "<th>S/N</th>";
 			$sn = "";
 			$result.="
 			<tr> $emptyHeader $sn";
-
-			
 
 			for ($i=0; $i < count($keys); $i++) { 
 				if ($keys[$i]=='ID' ||$keys[$i]=='id' ) {
@@ -244,18 +236,6 @@
 
 		private function buildTableRow($data,$action,$index=false,$appendForm=array()){
 			$result ='<tr class="append-content">';
-			// check if the extraLabelArray is set in the model entity
-			// $modelClassName = $this->classname;
-			// // loadClass($this->load, $modelClassName);
-			// if(isset($modelClassName::$extraLabelArray)){
-			// 	$extraParam = $modelClassName::$extraLabelArray;
-			// 	$arrTemp = array();
-			// 	foreach($extraParam as $key =>$value){
-			// 		$value = $value . "/" . randStrGen(10).base64_encode($data['ID']);
-			// 		$arrTemp[$key] = $value;
-			// 	}
-			// 	$data = array_merge($data,$arrTemp);
-			// }
 			if(!empty($appendForm)){
 				extract($appendForm);
 				$id = isset($data['ID'])?$data['ID']:'';
@@ -340,9 +320,9 @@
 					}
 					$value = $temp[0].$otherParam;
 				}
-				$this->load->model('tableActionModel');
-				if (method_exists($this->tableActionModel, $value)) {
-					$value = $this->tableActionModel->$value($data,$this->classname);
+				$tableActionModel = loadClass('tableActionModel');
+				if (method_exists($tableActionModel, $value)) {
+					$value = $tableActionModel->$value($data,$this->classname);
 					$value = array_values($value);
 					$key = array_shift($value);
 					$label = $key;
@@ -370,7 +350,6 @@
 				}else{
 					$editClass ='';
 				}
-				// $editClass = ($label=='edit' ||$label=='update')?"data-ajax-edit='1'":'';
 				$result.="<li data-ajax='$ajax' data-critical='$critical' $editClass ><a class='dropdown-item text-center text-capitalize'  href='$link'>$label</a></li>";
 			}
 			$result.= '</ul></div></div></td>';

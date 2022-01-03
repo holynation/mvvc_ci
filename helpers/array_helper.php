@@ -1,7 +1,6 @@
 <?php 
 //this function checks if an array is sequential or not
 //returns -1 if array is null 0 if not sequential and 1 if it is
-include_once('MY_string_helper.php');
 
 function isSequential($array){
 	if (empty($array)) {
@@ -75,7 +74,7 @@ function checkEmpty($array,$except=array()){
 function getLastInsert($db){
 	$query = 'select last_insert_id() as last';
 	$result = $db->query($query);
-	$result = $result->result_array();
+	$result = $result->getResultArray();
 	return $result[0]['last'];
 }
 
@@ -84,7 +83,7 @@ function query($db,$query,$data=array()){
 	if (is_bool($result)) {
 		return $result;
 	}
-	return $result->result_array();
+	return $result->getResultArray();
 }
 //function to help return to the previous page while setting error message
 
@@ -93,6 +92,7 @@ function loadStates(){
 	$list =scandir('assets/states');
 	$result = array();
 	//process the list well before they are returned
+	helper('string');
 	for ($i=0; $i < count($list); $i++) { 
 		$current = $list[$i];
 		if (startsWith($current,'.')) {
@@ -103,10 +103,10 @@ function loadStates(){
 	return $result;
 }
 function loadLga($state){
-	if (!file_exists("assets/states/$state")) {
+	if (!file_exists("public/assets/states/$state")) {
 		return '';
 	}
-	$content =file_get_contents("assets/states/$state");
+	$content =file_get_contents("public/assets/states/$state");
 	$content = trim($content);
 	$result = explode("\n", $content);
 	for ($i=0; $i < count($result); $i++) { 

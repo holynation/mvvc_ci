@@ -1,5 +1,4 @@
 <?php
-defined('BASEPATH') OR exit('No direct script access allowed');
 
 	/**
 	* This class will be used to generate table using normal query and 
@@ -9,7 +8,10 @@ defined('BASEPATH') OR exit('No direct script access allowed');
  	* @author	ALATISE OLUWASEUN aka HOLYNATION
  	* @since	Version 1.0.0
 	*/
-class QueryHtmlTableObjModel extends CI_Model
+namespace App\Models;
+
+use CodeIgniter\Model;
+class QueryHtmlTableObjModel extends Model
 {
 
 	/**
@@ -157,11 +159,16 @@ class QueryHtmlTableObjModel extends CI_Model
 	*/ 
 	private $_exlcudeSerialNumber = false;
 
+	/**
+	 * @var object
+	*/ 
+	protected $db;
+
+
 	function __construct()
 	{
-		parent::__construct();
-		$this->load->model('crud');
-		$this->lang->load('table_model');
+		$this->db = db_connect();
+		helper('string');
 	}
 
 	public function buildOrdinaryTable($data,$action=array(),$header=null){
@@ -176,7 +183,7 @@ class QueryHtmlTableObjModel extends CI_Model
 
 	public function openTableHeader($query, $queryData=array(),$parentModel=null,$tableAttr=array(),$excludeArray=array()){
 		if (empty($query)) {
-			throw new Exception($this->lang->line('no_query'));
+			throw new Exception("You must specify query to be used");
 		}
 		$limit="";
 		$array = array();
@@ -187,7 +194,7 @@ class QueryHtmlTableObjModel extends CI_Model
 		// check that the query is a select query and that there is id or * field
 		// specified in the query statement
 		if (( strpos($query, "ID") ===false || strpos($query, " * ")===false)  && strpos(strtolower($query), "select") ===false) {
-			throw new Exception($this->lang->line('no_select_query'));
+			throw new Exception("The query must be a select query and the an id field must be set");
 		}
 
 		$this->_query = $query;
@@ -226,7 +233,7 @@ class QueryHtmlTableObjModel extends CI_Model
 
 	public function paging($paged=false,$lower = 0, $length=null){
 		if(!$this->_query){
-			throw new Exception($this->lang->line('no_open_table_header'));
+			throw new Exception("The openTableHeader method must come first");
 		}
 		$this->_paging = ($paged) ? $paged : false;
 		$length = $length?$length:self::DEFAULT_PAGE_LENGTH;
@@ -250,18 +257,18 @@ class QueryHtmlTableObjModel extends CI_Model
 	*/
 	public function generateTable(){
 		if (empty($this->_query)) {
-			throw new Exception($this->lang->line('no_query'));
+			throw new Exception("You must specify query to be used.");
 		}
 		$result = $this->db->query($this->_query,$this->_queryData);
 
 		if ($this->_paging) {
 			$result2 = $this->db->query("SELECT FOUND_ROWS() as totalCount");
-			$result2=$result2->result_array();
+			$result2=$result2->getResultArray();
 			$this->_totalLength = $result2[0]['totalCount'];
 		}
 
 		// TODO: FIND A WAY TO ENSURE USER CLICK EXPORT BUTTON FOR IT TO EXPORT DATA
-		$result = $result->result_array();
+		$result = $result->getResultArray();
 		if ($this->export) {
 			$exportName = $this->classname."_table_data";
 			$this->loadExportTable($exportName,$result);
@@ -270,7 +277,7 @@ class QueryHtmlTableObjModel extends CI_Model
 		$totalLength= $this->_totalLength?$this->_totalLength:count($result);
 		$extra='';
 
-		// TODO: THERE IS A LAST PAGING LINK BUG THAT IS NOT MEANT TO BE THERE IN THE LINK
+		// TODO: THERE IS A LAST PAGING ANCHOR LINK BUG THAT IS NOT MEANT TO BE THERE IN THE LINK
 		if ($this->_paging) {
 			$classname = $this->extractClassnameFromQuery($this->_query);
 			$extra = $this->generatePagedFooter($totalLength,$this->_lower,$this->_length);
@@ -286,7 +293,7 @@ class QueryHtmlTableObjModel extends CI_Model
 	*/
 	public function appendTableAction($action=array(),$header=array()){
 		if(!$this->_query){
-			throw new Exception($this->lang->line('no_open_table_header'));
+			throw new Exception("The openTableHeader method must come first");
 		}
 		$this->_actionArray = $action;
 		$this->_header = $header;
@@ -299,7 +306,7 @@ class QueryHtmlTableObjModel extends CI_Model
 	*/
 	public function appendCheckBox($checkBox = true,$attr=array()){
 		if(!$this->_query){
-			throw new Exception($this->lang->line('no_open_table_header'));
+			throw new Exception("The openTableHeader method must come first");
 		}
 
 		if($checkBox){
@@ -317,7 +324,7 @@ class QueryHtmlTableObjModel extends CI_Model
 
 	private function buildHtmlAndAction($data,$extra){
 		if (empty($data)) {
-			return "<div class='empty-data alert alert-primary text-dark'>" .$this->lang->line('no_record_found') . "</div>";	
+			return "<div class='empty-data alert alert-primary text-dark'>NO RECORD FOUND</div>";	
 		}
 		$result = $this->_openTable;
 		$result.= $this->extractheader(empty($this->_header)?array_keys($data[0]):$this->_header,!empty($this->_actionArray));
@@ -361,8 +368,6 @@ class QueryHtmlTableObjModel extends CI_Model
 		
 		$result.="
 		<tr> $emptyHeader $sn";
-
-		
 
 		for ($i=0; $i < count($keys); $i++) { 
 			if ($keys[$i]=='ID' ||$keys[$i]=='id' ) {
@@ -448,7 +453,7 @@ class QueryHtmlTableObjModel extends CI_Model
 			}
 
 			if (strtolower($keys[$i])=='status') {
-				if($this->classname == 'customer' || $this->classname=='investment'){
+				if($this->classname == 'customer'){
 					$current = $data[$keys[$i]]?'Approved':'Unapproved';
 				}else{
 					$current = $data[$keys[$i]]?'Enabled':'Disabled';
@@ -501,9 +506,9 @@ class QueryHtmlTableObjModel extends CI_Model
 				}
 				$value = $temp[0].$otherParam;
 			}
-			$this->load->model('tableActionModel');
-			if (method_exists($this->tableActionModel, $value)) {
-				$value = $this->tableActionModel->$value($data,$this->classname);
+			$tableActionModel = loadClass('tableActionModel');
+			if (method_exists($tableActionModel, $value)) {
+				$value = $tableActionModel->$value($data,$this->classname);
 				$value = array_values($value);
 				$key = array_shift($value);
 				$label = $key;
@@ -531,7 +536,6 @@ class QueryHtmlTableObjModel extends CI_Model
 			}else{
 				$editClass ='';
 			}
-			// $editClass = ($label=='edit' ||$label=='update')?"data-ajax-edit='1'":'';
 			$result.="<li data-ajax='$ajax' data-critical='$critical' $editClass ><a class='dropdown-item text-center text-capitalize'  href='$link'>$label</a></li>";
 		}
 		$result.= '</ul></div></div></td>';
@@ -555,17 +559,17 @@ class QueryHtmlTableObjModel extends CI_Model
 	*/
 	private function buildDataJoinQuery($queryData,$parentModel,$excludeArray=array(),&$onclause,&$foreignTable){
 		if (empty($this->_query)) {
-			throw new Exception($this->lang->line('no_query'));
+			throw new Exception("You must specify query to be used");
 		}
 
 		$query = $this->_query;
 		$queryString = '';
-		$data = array();
+		$data = [];
 		$result = $this->db->query($query,$queryData);
-		$results = $result->result_array();
+		$results = $result->getResultArray();
 		$display='';
 		$foreignVal = '';
-		if($result->num_rows() > 0){
+		if($result->getNumRows() > 0){
 			$fields = array_keys($results[0]);
 			foreach($fields as $key => $val){
 				if(!empty($excludeArray)){
@@ -578,7 +582,7 @@ class QueryHtmlTableObjModel extends CI_Model
 					$tablename = substr($val, 0,strlen($val)-strlen(self::FOREIGN_KEY_END));
 					$tablename = strtolower($tablename);
 					if (!class_exists($tablename)) {
-						$this->load->model("entities/$tablename");
+						$tablename = "App\\Entities\\".ucfirst($tablename);
 					}
 					if (isset($tablename::$displayField)) {
 						if (is_array($tablename::$displayField)) {
@@ -611,7 +615,7 @@ class QueryHtmlTableObjModel extends CI_Model
 
 			}
 		}else{
-			echo $this->lang->line('no_record_found');
+			echo "NO RECORD FOUND";
 		}
 
 		$queryString = implode(",", $data);
@@ -742,9 +746,6 @@ class QueryHtmlTableObjModel extends CI_Model
 			$div = $pos - $len;
 			$spaceIndex = strrpos(substr($query,0,$pos), ' ');
 			$this->classname = trim(substr($query, $spaceIndex+1,($pos - ($spaceIndex+1))));
-			if ($this->classname=='std') {
-				$this->classname='student';
-			}
 			return;
 		}
 		//if .id is not present then validate the id is present and get the first string after the from keywork
@@ -755,7 +756,6 @@ class QueryHtmlTableObjModel extends CI_Model
 			$from+=strlen("from") + 1;
 
 			$classname = substr($query,$from,strpos($query, ' ',$from) -$from);
-			// echo "testing showng classname check file. $classname";exit;
 			$this->classname = $classname;
 		}
 	}

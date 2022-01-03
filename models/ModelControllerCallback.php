@@ -1,37 +1,27 @@
 <?php 
 	/**
-	* This class contains  the method for performing extra action performed
+	* This is the class that contain the method that will be called whenever any data is inserted for a particular table.
+	* the url path should be linked to this page so that the correct operation is performed ultimately. T
 	*/
-	class ModelControllerCallback extends CI_Model
+	namespace App\Models;
+
+	use CodeIgniter\Model;
+	use App\Models\WebSessionManager;
+
+	class ModelControllerCallback extends Model
 	{
 		
-		function __construct()
-		{
-			parent::__construct();
-			$this->load->model('webSessionManager');
-			$this->load->helper('string');
-			$this->load->library('hash_created');
-			$this->load->model('mailer');
-		}
-
-		public function onAdminInserted($data,$type,&$db,&$message)
-		{
-			//remember to remove the file if an error occured here
-			//the user type should be admin
-			loadClass($this->load,'user');
-			if ($type=='insert') {
-				// login details as follow: username = email, password = firstname(in lowercase)
-				$password = $this->hash_created->encode_password(strtolower($data['firstname']));
-				$param = array('user_type'=>'admin','username'=>$data['email'],'password'=>$password,'user_table_id'=>$data['LAST_INSERT_ID']);
-				$std = new User($param);
-				if ($std->insert($db,$message)) {
-					return true;
-				}
-				return false;
-			}
-			return true;
-		}
-			
+	function __construct()
+	{
+		$this->webSessionManager = new WebSessionManager;
+		$this->db = db_connect();
+		helper('string');
 	}
 
+	// public function on{Modelname}Inserted($data,$type,$db,&$message)
+	// {
+	// 	return true;
+	// }
+		
+	}
  ?>

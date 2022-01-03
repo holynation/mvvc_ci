@@ -2,7 +2,12 @@
 /**
 * The model for generating table view for any model
 */
-class TableViewModel extends CI_Model
+namespace App\Models;
+
+use CodeIgniter\Model;
+use App\Models\TableViewModel;
+
+class TableViewModel extends Model
 {
 	private $uploadedFolderName = 'uploads'; // this name should be constant and not change at all
 	private $modelFolderName= 'entities';
@@ -10,15 +15,15 @@ class TableViewModel extends CI_Model
 	private $booleanArray = array(0 =>'No',1=>'Yes' );
 	private $defaultPagingLength =50;
 	public $export=false;
+	private $crudNameSpace = 'App\Models\Crud';
+	private $tableActionModel;
+	protected $db;
+
 	function __construct()
 	{
-		parent::__construct();
-		$this->load->model('crud');
-		$this->load->model('tableActionModel');
-		$this->load->helper('string');
-		$this->load->helper('download');
-		$this->load->helper('file');
-		$this->lang->load('table_model');
+		$this->tableActionModel = new TableViewModel;
+		$this->db = db_connect();
+		helper(['string','filesystem']);
 	}
 	//create  a method that load the table based on the specified paramterr
 	/**
@@ -34,8 +39,8 @@ class TableViewModel extends CI_Model
 		//use get function for the len and the start index for the sorting
 		$start = (isset($_GET['p_start'])&& is_numeric($_GET['p_start']) )?$_GET['p_start']:$start;
 		$length = (isset($_GET['p_len'])&& is_numeric($_GET['p_len']) )?$_GET['p_len']:$length;
-		$this->load->model($this->modelFolderName.'/'.$model);
-		$data = $this->export?$this->$model->getWhereNonObject($conditionArray,$message,0,null,$resolve,$sort):$this->$model->getWhere($conditionArray,$message,$start,$length,$resolve,$sort);
+		$newModel = loadClass("$model");
+		$data = $this->export?$this->$newModel->getWhereNonObject($conditionArray,$message,0,null,$resolve,$sort):$this->$newModel->getWhere($conditionArray,$message,$start,$length,$resolve,$sort);
 		return $this->export?$this->loadExportTable($model,$data):$this->loadTable($model,$data,$message,$exclusionArray,$action,$paged,$start,$length,$resolve);
 	}
 	public function loadExportTable($model,$data)
@@ -60,17 +65,13 @@ class TableViewModel extends CI_Model
 		// $totalRow=0;
 		if (empty($data) || $data==false) {
 			$link = base_url("vc/$model/create");
-			return "<div class='empty-data alert alert-info text-light'>".
-				$this->lang->line('no_record_found').
-			"</div>";
+			return "<div class='empty-data alert alert-info text-light'>NO RECORD FOUND</div>";
 		}
 		$header = $this->getHeader($model,$exclusionArray,$removeId);
 		$result=$this->openTable($tableAttr);
 		$result.=$this->generateheader($header,$action,$appendForm,$multipleAction);
 		$result.=$this->generateTableBody($model,$data,$exclusionArray,$actionArray,$appendForm,$multipleAction);
 		$result.=$this->closeTable();
-
-		// $size = $length?$length:$this->defaultPagingLength;
 		if ($paged && $totalRow > $length) {
 			$result.=$this->generatePagedFooter($totalRow,$start,$length);//for testing sake
 		}
@@ -78,7 +79,8 @@ class TableViewModel extends CI_Model
 	}
 	// the multipleAction arg is for performing multiple action using checkbox
 	public function getTableHtml($model,&$message='',$exclusionArray=array(),$action=null,$paged= true,$start=0,$length=NULL,$resolve=true,$sort=' order by ID desc ',$where='',$appendForm=array(),$multipleAction=false,$tableAttr = array()){
-		loadClass($this->load,$model);
+		$newModel = loadClass("$model");
+
 		if ($paged) {
 			$length = $length?$length:$this->defaultPagingLength;
 		}
@@ -87,26 +89,15 @@ class TableViewModel extends CI_Model
 		$length = (isset($_GET['p_len'])&& is_numeric($_GET['p_len']) )?(int)$_GET['p_len']:$length;
 
 		// $data = $this->export?$this->$model->allNonObject($message,$resolve,0,null,$sort):$this->$model->all($message,$resolve,$start,$length,$sort,$where);
-		$data = $this->$model->all($message,$resolve,$start,$length,$sort,$where);
+		$data = $this->$newModel->all($message,$resolve,$start,$length,$sort,$where);
 
 		$countAll = ''; // using this to count all the records in the model
 		if($paged){
-			$countAll = $this->db->count_all($model);
+			$builder = $this->db->table("$model");
+			$countAll = $builder->countAll();
 		}
 		// return $this->export?$this->loadExportTable($model,$data):$this->loadTable($model,$data,$message,$exclusionArray,$action,$paged,$start,$length,true,$appendForm,$multipleAction);
 		return $this->export?$this->loadExportTable($model,$data):$this->loadTable($model,$data,$countAll,$exclusionArray,$action,$paged,$start,$length,true,$appendForm,$multipleAction,$tableAttr);
-	}
-	public function getTableHtmlExtra($model,&$message='',$exclusionArray=array(),$action=null,$paged= true,$start=0,$length=NULL,$resolve=true,$sort=' order by ID desc '){
-		loadClass($this->load,$model);
-		if ($paged) {
-			$length = $length?$length:$this->defaultPagingLength;
-		}
-		//use get function for the len and the start index for the sorting
-		$start = (isset($_GET['p_start'])&& is_numeric($_GET['p_start']) )?(int)$_GET['p_start']:$start;
-		$length = (isset($_GET['p_len'])&& is_numeric($_GET['p_len']) )?(int)$_GET['p_len']:$length;
-		$data = $this->export?$this->$model->allNonObject($message,$resolve,0,null,$sort):$this->$model->all($message,$resolve,$start,$length,$sort);
-		return $this->export?$this->loadExportTable($model,$data):$this->loadTable($model,$data,$message,$exclusionArray,$action,$paged,$start,$length);
-		
 	}
 	//the action array will contain the 
 	private function generateActionHtml($data,$actionArray){//the id will be extracted from
@@ -175,7 +166,6 @@ class TableViewModel extends CI_Model
 			}else{
 				$editClass ='';
 			}
-			// $editClass = ($label=='edit' ||$label=='update')?"data-ajax-edit='1'":'';
 			$result.="<li data-item-id='$currentid' data-default='$default' data-critical='$critical' $editClass><a href='$link' class='dropdown-item text-center text-capitalize'>$label</a></li>";
 		}
 		return $result;
@@ -194,20 +184,6 @@ class TableViewModel extends CI_Model
 		return $result;
 	}
 	private function generateTableRow($model,$rowData,$exclusionArray,$actionArray,$index=false,$appendForm=array(),$multipleAction){
-		// check if the extraLabelArray is set in the model entity
-		// $modelClassName = $model;
-		// // this is a test case for using an extra param in the field data
-		// if(isset($modelClassName::$extraLabelArray)){
-		// 	$extraParam = $modelClassName::$extraLabelArray;
-		// 	$genObj = new stdClass();
-		// 	foreach($extraParam as $key =>$value){
-		// 	$value = $value . "/" . randStrGen(10).base64_encode($rowData->ID);
-		// 		$genObj->$key = $value;
-		// 	}
-		// 	$rowData = (array)$rowData;
-		// 	$rowData = convertObjectClass(array_merge($rowData,(array)$genObj), ucfirst($modelClassName));
-		// }
-
 		$result="<tr data-row-identifier='{$rowData->ID}' class='best-content' id='best-content'>";
 
 		// this is to add multiple checkbox functionality
@@ -258,15 +234,6 @@ class TableViewModel extends CI_Model
 				}else{
 					$selector = $model . "_download_$id";
 					$value = "<a href='$link' target='_blank' id='$selector'>View</a>";
-					// $value .= "<script>
-					// 		\$(document).ready(function(){
-					// 			\$('td a[id={$selector}]').click(function(e){
-					// 				e.preventDefault();
-					// 				// console.log('hi');
-					// 				//force_download($link,NULL)
-					// 			});
-					// 		});
-					// </script>";
 				}
 			}
 
@@ -452,15 +419,15 @@ class TableViewModel extends CI_Model
 	private function validateModelNameAndAccess($modelname){
 		$message='';
 		if (empty($modelname)) {
-			throw new Exception($this->lang->line('no_model')); 
+			throw new Exception("Empty model name not allowed"); 
 			return false;
 		}
-		if (!is_subclass_of($this->$modelname, 'Crud')) {
-			throw new Exception($this->lang->line('no_model_crud'));
+		if (!is_subclass_of($this->$modelname, $this->crudNameSpace)) {
+			throw new Exception("Model is not a crud: make sure the correct name of the model is entered");
 			return false;
 		}
 		if (!$this->validateAccess($modelname)) {
-			throw new Exception($this->lang->line('access_denied'));
+			throw new Exception("Access Denied");
 			return false;
 		}
 		return true;
@@ -470,4 +437,5 @@ class TableViewModel extends CI_Model
 		return true;//for now. change the implementation later//the implementation will make a call to the accessControl model
 	}
 }
- ?>
+
+?>

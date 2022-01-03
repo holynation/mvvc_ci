@@ -1,21 +1,26 @@
 <?php
 
-class Crud extends CI_Model
+namespace App\Models;
+
+use App\Entities;
+
+class Crud
 {
-	protected $array;//array containing the field  and value of the object inform of an associateive array
+	protected $array = [];//array containing the field  and value of the object inform of an associateive array
 	protected $foreignKeyEnd='_id';
 	static $baseurl;
+	protected $db;
+	private $entitiesNameSpace = 'App\Entities\\';
 	function __construct($array=array())
 	{
-		parent::__construct();
+		// parent::__construct();
 		if (!is_array($array)) {
-			throw new Exception("Constructor argument must be an array");
-
+			throw new \Exception("Constructor argument must be an array");
 		}
 		$this->array = $array;
-		$this->load->helper('string');
-		$this->load->helper('text');
+		helper(['string','text']);
 		static::$baseurl = base_url();
+		$this->db = db_connect();
 	}
 	/**
 	 * This function builds the select clause needed to retrieve feed of this table while substituting the foreign key id with the display name.
@@ -73,27 +78,29 @@ class Crud extends CI_Model
 			if (endsWith($field,$this->foreignKeyEnd)) {
 				$tablename = substr($field, 0,strlen($field)-strlen($this->foreignKeyEnd));
 				$tablename = strtolower($tablename);
+				$oldTableName = $tablename;
 				if (!class_exists($tablename)) {
-					$this->load->model("entities/$tablename");
+					$modelName = "App\\Entities\\".ucfirst($tablename);
+					$tablename = new $modelName;
 				}
 				if (isset($tablename::$displayField)) {
 					$display='';
 					if (is_array($tablename::$displayField)) {
 						$display="concat_ws(' '";
 						foreach ($tablename::$displayField as $tval) {
-							$display.=",".$tablename.'.'.$tval;
+							$display.=",".$oldTableName.'.'.$tval;
 						}
 						$display.=") as $field";
 					}
 					else{
 						$display =strtolower($tablename::$tablename).'.'.$tablename::$displayField.' as '.$field;
 					}
-					$foreignTable[]=$tablename;
-					$temp = $thisTable.'.'.$tablename.$this->foreignKeyEnd;
+					$foreignTable[]=$oldTableName;
+					$temp = $thisTable.'.'.$oldTableName.$this->foreignKeyEnd;
 					
-					$usse = isset($tablename::$joinField)?$tablename.'.'.$tablename::$joinField :"$tablename.ID";
+					$usse = isset($tablename::$joinField)?$oldTableName.'.'.$tablename::$joinField :"$oldTableName.ID";
 					
-					$onclause.=" left join $tablename on $temp =$usse ";
+					$onclause.=" left join $oldTableName on $temp =$usse ";
 					
 				}
 				else{
@@ -106,7 +113,6 @@ class Crud extends CI_Model
 			}
 
 		}
-		// $onclause = substr($onclause, 0,strlen($onclause)-4);
 
 	}
 	//function to get arrayProperties
@@ -123,7 +129,7 @@ class Crud extends CI_Model
 			return $this->$methodName();
 		}
 		else{
-			return parent::__get($name);
+			return null;
 		}
 	}
 
@@ -272,7 +278,8 @@ class Crud extends CI_Model
 	protected function buildObject($classname,$result){
 		$objectArray =array();
 		if (!class_exists($classname)) {
-			$this->load->model("entities/$classname");
+			$modelName = "App\\Entities\\".ucfirst($classname);
+			$classname = new $modelName;
 		}
 		for ($i=0; $i < count($result); $i++) {
 			$current= $result[$i];
@@ -283,9 +290,9 @@ class Crud extends CI_Model
 	function allNonObject(&$totalRow=0,$resolveForeign=true,$lower=0,$length=NULL,$sort='',$where=''){
 		$tablename =$this->getTableName();
 		$limit="";
-		$array=array();
+		$array=[];
 		if ($length!=NULL) {
-			$limit = " LIMIT ?,?";
+			$limit = " limit ?, ? ";
 			$array=array($lower,$length);
 		}
 		$query =$resolveForeign?$this->buildSelectClause()." $where $sort $limit":"SELECT SQL_CALC_FOUND_ROWS * FROM $tablename $where $sort $limit ";
@@ -299,13 +306,13 @@ class Crud extends CI_Model
 	function all(&$totalRow=0,$resolveForeign=true,$lower=0,$length=NULL,$sort='',$where=''){
 		$tablename =$this->getTableName();
 		$limit="";
-		$array=array();
+		$array=[];
 		if ($length!=NULL) {
-			$limit = " LIMIT ?,?";
-			$array=array($lower,$length);
+			$limit = " limit ?, ? ";
+			$array=[$lower,$length];
 		}
 
-		$query =$resolveForeign?$this->buildSelectClause()." $where $sort $limit":"SELECT SQL_CALC_FOUND_ROWS * FROM $tablename $where $sort $limit ";
+		$query =$resolveForeign?$this->buildSelectClause()." {$where} {$sort} {$limit} ":"SELECT SQL_CALC_FOUND_ROWS * FROM $tablename $where $sort $limit ";
 		$result = $this->query($query,$array);
 		$result2 = $this->query("SELECT FOUND_ROWS() as totalCount");
 		$totalRow=$result2[0]['totalCount'];
@@ -320,8 +327,8 @@ class Crud extends CI_Model
 		$limit="";
 		$array=array();
 		if ($length!=NULL) {
-			$start =$this->db->conn_id->escape_string($start);
-			$length =$this->db->conn_id->escape_string($length);
+			$start =$this->db->escape($start);
+			$length =$this->db->escape($length);
 			$limit = " LIMIT $start,$length";
 			// $array=array($start,$length);
 		}
@@ -366,7 +373,7 @@ class Crud extends CI_Model
 
 	public function allQuery($query)
 	{
-		$tempQuery =$this->db->conn_id->escape($query);
+		$tempQuery =$this->db->escape($query);
 		$fields = array_keys(static::$labelArray);
 		$isFirst = true;
 		$result ="";
@@ -406,7 +413,7 @@ class Crud extends CI_Model
 				$id=$this->array['ID'];
 			}
 			else{
-				throw new Exception('please specify the index or set the index value as a parameter');
+				throw new \Exception('please specify the index or set the index value as a parameter');
 			}
 		}
 		$tablename=$this->getTableName();
@@ -416,7 +423,8 @@ class Crud extends CI_Model
 			return false;
 		}
 		$result = $result[0];
-		$resultobject = new  $tablename($result);
+		$tablename = $this->entitiesNameSpace.$tablename;
+		$resultobject = new $tablename($result);
 		return $resultobject;
 	}
 	function load($id= null,&$dbObject= null){
@@ -433,28 +441,30 @@ class Crud extends CI_Model
 		$tablename =$this->getTableName();
 		$result =$db->query($query,$data,$dbObject);
 		$resultObjects = array();
+		$tablename = $this->entitiesNameSpace.$tablename;
 		foreach ($result as $value) {
 			$resultObjects[] = new $tablename($value);
 		}
 		return $resultObjects;
 	}
 
-	function query($query,$data=array(),&$dbObject=null){
+	function query($query,$data=[],&$dbObject=null){
 		$db=$this->db;
 		if ($dbObject!=null) {
 			$db=$dbObject;
 		}
+		// echo $query;exit;
 		$result =$db->query($query,$data);
 		if (!is_object($result)) {
 			return $result;
 		}
-		$result = $result->result_array();
+		$result = $result->getResultArray();
 		return $result;
 	}
 
 	function update($id=NULL,&$dbObject=null){
 		if (empty($id) && !isset($this->array['ID'])) {
-			throw new Exception("null id field found");
+			throw new \Exception("null id field found");
 		}
 		
 		
@@ -518,7 +528,7 @@ class Crud extends CI_Model
 
 	function insert(&$dbObject=null,&$message=''){
 		if (empty($this->array)) {
-			throw new Exception("no value to insert");
+			throw new \Exception("no value to insert");
 		}
 		if ($this->checkExist()) {
 			$checkMsg = $this->checkExist();
@@ -556,26 +566,19 @@ class Crud extends CI_Model
 
 	function delete($id=NULL,&$dbObject=NULL){
 		if ($id==NULL && !isset($this->array['ID'])) {
-			throw new Exception("object does not have id");
+			throw new \Exception("object does not have id");
 		}
 		if ($id ==NULL) {
 			$id = $this->array["ID"];
 		}
 		$tablename =$this->getTableName();
 		$query = "delete from $tablename where id=?";
-		return $this->query($query,array($id),$dbObject);
-		// $result = $this->query($query,array($id),$dbObject);
-		// if ($result > 0) {
-		// 	return true;
-		// }
-		// else{
-		// 	return false;
-		// }
+		return $this->query($query,[$id],$dbObject);
 
 	}
 	public function enable($id=null,&$dbObject=null){
 		if ($id==NULL && !isset($this->array['ID'])) {
-			throw new Exception("object does not have id");
+			throw new \Exception("object does not have id");
 		}
 		if ($id ==NULL) {
 			$id = $this->array["ID"];
@@ -584,7 +587,7 @@ class Crud extends CI_Model
 	}
 	public function disable($id=null,&$dbObject=null){
 		if ($id==NULL && !isset($this->array['ID'])) {
-			throw new Exception("object does not have id");
+			throw new \Exception("object does not have id");
 		}
 		if ($id ==NULL) {
 			$id = $this->array["ID"];
@@ -597,7 +600,7 @@ class Crud extends CI_Model
 		$result = $this->query($query,array($value,$id),$dbObject);
 		if ($result) {
 			$this->array['status'] = $value;
-			$dbObject->trans_commit(); //for any transaction related operation before this place
+			$dbObject->transCommit(); //for any transaction related operation before this place
 			return true;
 		}
 		else{
@@ -807,9 +810,9 @@ class Crud extends CI_Model
 		$query.= $this->buildmultipleInsertValue($data,$fields);
 		$query.=$this->buildOnUpdateField($fields);
 		$db = $dbObject== null?$this->db:$dbObject;
-		$result=   $db->query($query,array(),$dbObject);
+		$result=   $db->query($query,[],$dbObject);
 		$mess = $db->query("show errors");
-		$message = $mess->result_array();
+		$message = $mess->getResultArray();
 		$message = $message?$message[0]['Message']:'';
 		return $result;
 	}
@@ -834,7 +837,7 @@ class Crud extends CI_Model
 			$passwordIndex = array_search('password', $fields);
 			if ($passwordIndex == false) {
 				// $fields[]='password';
-				throw new Exception("there is no password field to hash so set the user field currectly.", 1);
+				throw new \Exception("there is no password field to hash so set the user field currectly.", 1);
 			}
 			$usernameIndex = array_search('username', $fields);
 		}
@@ -847,7 +850,7 @@ class Crud extends CI_Model
 			 	if (!isset($data[$i][$value])) {
 			 		continue;
 			 	}
-			 	loadclass($this->load,$key);
+			 	$key = loadClass($key);
 			 	if (isset($key::$displayField)) {
 			 		$fieldName = $key::$displayField;
 			 		$tp = $this->getFieldID($fieldName,$data[$i][$value],$key);
@@ -899,7 +902,7 @@ class Crud extends CI_Model
 		$result = array();
 		for ($i=0; $i < count($fk); $i++) { 
 			$current = $fk[$i];
-			loadClass($this->load,$current);	
+			$current = loadClass($current);	
 			if (isset($current::$displayField)) {
 				$displayName = $current::$displayField;
 				$result[$displayName] = $current.'_id';
@@ -921,7 +924,7 @@ class Crud extends CI_Model
 		$fieldname=trim($fieldname);
 		$fieldValue=trim($fieldValue);
 		$query = "select id from $tablename where $fieldname =?";
-		$result = $this->query($query,array($fieldValue));
+		$result = $this->query($query,[$fieldValue]);
 		if ($result) {
 			return $result[0]['id'];
 		}
@@ -967,7 +970,7 @@ class Crud extends CI_Model
 			if (!$this->isSqlSafeInput($value)) {
 				exit('error while processing request. please try again');
 			}
-			$temp = $this->db->conn_id->escape_string($values[$i]);
+			$temp = $this->db->escape($values[$i]);
 			$values[$i]="'$temp'";
 		}
 		return $values;
@@ -1018,7 +1021,7 @@ class Crud extends CI_Model
 		$tables = array_keys($temp);
 		array_unshift($tables, $mainTable);
 		if (empty($tables)) {
-			throw new Exception("error while processing kindly check your code and the model file.", 1);
+			throw new \Exception("error while processing kindly check your code and the model file.", 1);
 		}
 		$parents = empty($ending)?array():array_keys($ending);
 		$result = $tables[0];
@@ -1109,7 +1112,7 @@ class Crud extends CI_Model
 	*/
 	private function getTemplates($table,$resolve=true,$isSql=false){
 		$fields='';
-		loadclass($this->load,$table);
+		$table = loadClass($table);
 		// static::$uploadFields contain the fields you want to include only in the template with the name of the fields to be included as the values for the array element
 		if (isset($table::$uploadFields)) {
 			$fields = $table::$uploadFields;
@@ -1145,7 +1148,7 @@ class Crud extends CI_Model
 		if (empty($model)) {
 			$model =$this->getTableName();
 		}
-		loadclass($this->load,$model);
+		$model = loadClass($model);
 		$labels = $model::$labelArray;
 		unset($labels['status'],$labels['ID']);
 		$fields = array_keys($labels);
@@ -1154,7 +1157,7 @@ class Crud extends CI_Model
 				$current = $fields[$i];
 				if (endsWith($current,'_id')) {
 					$classname = substr($current, 0,strrpos($current, '_id',-1));
-					loadclass($this->load,$classname);
+					$classname = loadClass($classname);
 					$classname = ucfirst($classname);
 					$joiner ='';
 					if ($isSql) {
@@ -1182,7 +1185,7 @@ class Crud extends CI_Model
 			$dbObject = $this->db;		
 		}
 		//think about how to include last insert id and how to undo the reverse
-		$dbObject->trans_start();
+		$dbObject->transBegin();
 		     for ($i=0; $i < count($tables); $i++) { 
                       $table = $tables[$i];
                       $tableField= $this->extractTableInfos($table,$fields,$data,$tableData,$message,$translate);
@@ -1191,11 +1194,11 @@ class Crud extends CI_Model
                       }
                        $res = $this->uploadSingle($table,$tableField,$tableData,$message,$dbObject,$translate);
                        if (!$res) {
-                               $dbObject->trans_rollback();
+                               $dbObject->transRollback();
                                return false;
                        }
 	}
-	$dbObject->trans_commit();
+	$dbObject->transCommit();
 	//add the message based on the information that could be derived
 	return true;
 }
@@ -1219,7 +1222,7 @@ class Crud extends CI_Model
 	function getLastInsertId(){
 		$query = "SELECT LAST_INSERT_ID() AS last";//sud specify the table
 		$result =$this->db->query($query);
-		$result = $result->result_array();
+		$result = $result->getResultArray();
 		return $result[0]['last'];
 
 	}

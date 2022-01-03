@@ -2,7 +2,7 @@
 	function getFromDbResult($db,$query, $data = array()){
 		$sql  = $query;
 		$res = $db->query($sql,$data);
-		return ($res->num_rows() > 0) ? $res->result_array() : 'no result';
+		return ($res->num_rows() > 0) ? $res->getResultArray() : 'no result';
 	}
 	function getViewTitle()
 	{
@@ -202,8 +202,8 @@
 	function isValidPasswordOTP($scope,$otp)
 	{
 		$query="select * from password_otp where otp=? and status=1";
-		$result = $scope->db->query($query,array($otp));
-		$result =$result->result_array();
+		$result = $scope->query($query,array($otp));
+		$result =$result->getResultArray();
 		return !$result;
 	}
 
@@ -303,12 +303,12 @@
 	function getRoleIdByName($db,$name){
 		$query = "select id from role where role_name=?";
 		$result = $db->query($query,array($name));
-		$result = $result->result_array();
+		$result = $result->getResultArray();
 		return $result[0]['id'];
 	}
 	function buildOptionFromQuery($db,$query,$data=null,$val=''){
 		$result = $db->query($query,$data);
-		$result = $result->result_array();
+		$result = $result->getResultArray();
 		if ($result==false) {
 			return '';
 		}
@@ -351,9 +351,10 @@
 			exit;
 		}
 	}
-	function loadClass($load,$classname){
-		if (!class_exists(ucfirst($classname))) {
-			$load->model("entities/$classname");
+	function loadClass($classname){
+		if (!class_exists($classname)) {
+			$modelName = "App\\Entities\\".ucfirst($classname);
+			return new $modelName;
 		}
 	}
 
@@ -582,21 +583,6 @@
 		header("Content-disposition: attachment;filename=$filename");
 		echo $content; exit;
 	}
-
-	//function to generate inc number
-	function generateInc($db,$pos,$format){
-		$pos2= $pos + strpos($format, ')',$pos);
-		$n = (int)substr($format, $pos+4,$pos2);
-		$query = "select ID from applicant order by ID desc limit 1";
-		$result = $db->query($query);
-		$value = 0;
-		if ($result->num_rows > 0) {
-			$result = $result->result_array();
-			$value =$result[0]['ID'];
-		}
-		$value++;
-		return padNumber($n,$value);
-	}
 	function padNumber($n,$value){
 		$value = ''+$value; //convert the type to string
 		$prevLen= strlen($value);
@@ -654,7 +640,7 @@
 	}
 
 	function appBuildName($key = 'cookie'){
-		$result = array('cookie' => '9jacashback', 'userType' => 'customer');
+		$result = array('cookie' => 'ajo', 'userType' => 'customer');
 		return $result[$key];
 	}
 
@@ -675,13 +661,16 @@
 		$content = $module.'-'.$page;
 		setcookie($cookie,$content,0,'/','',false,true);
 	}
-	function show_access_denied(){
-		include_once('application/views/access_denied.php');exit;
+	function show_access_denied($loader){
+		$viewName = "App\\Views\\access_denied";
+		view($viewName);
 	}
 
 	function show_operation_denied($loader){
-		$loader->view('operation_denied');
+		$viewName = "App\\Views\\operation_denied";
+		view($viewName);
 	}
+
 	//function to replace the first occurrence of a string
 	function replaceFirst($toReplace,$replacement,$string){
 		$pos = stripos($string, $toReplace);
@@ -708,6 +697,28 @@
 		return preg_match($numPattern, $password) && preg_match($upperCasePattern, $password) && preg_match($lowerCasePattern, $password) && strlen($password)>=$minLength;
 	}
 
+	function makeHash($string, $salt = ''){
+ 		return hash('sha256', $string . $salt);
+ 	}
+
+ 	function encode_password($password){
+ 		return password_hash($password, PASSWORD_BCRYPT, array(
+ 			'cost'  => 10
+ 			));		 		
+ 	}
+
+ 	function decode_password($userData,$fromDb){
+ 		if($userData != NULL){
+ 			return password_verify($userData, $fromDb);
+ 		}
+ 		return false;		
+ 	}
+
+ 	function unique(){
+ 		return makeHash(uniqid());
+ 	}
+
+
     function appConfig($mailKey){
     	$mailLink = array('salt'=>'_~2y~12~T31xd7x7b67FO', 'type' => array(1=>'register',2=>'forget',3=> 'account',4=>'report',5=>'resetToken',6=>'resetSuccess'),'company_name'=>'9jaCashBack','company_address'=>'Ibadan','company_email'=>'holynationdevelopment@gmail.com','footer_link' => "9jacashback.com");
 		return $mailLink[$mailKey];
@@ -716,6 +727,6 @@
     function getLastInsertId($db){
 		$query = "SELECT LAST_INSERT_ID() AS last";//sud specify the table
 		$result = $db->query($query);
-		$result = $result->result_array();
+		$result = $result->getResultArray();
 		return $result[0]['last'];
 	}

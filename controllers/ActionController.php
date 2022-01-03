@@ -2,62 +2,92 @@
 	/**
 	* This class like other controller class will have full access control capability
 	*/
-	class ActionController extends CI_Controller
+	namespace App\Controllers;
+
+	use App\Models\WebSessionManager;
+
+	class Actioncontroller extends BaseController
 	{
 		private $uploadedFolderName = 'uploads';
+		private $crudNameSpace = 'App\Models\Crud';
+		private $db;
+		private $webSessionManager;
+
 		function __construct()
 		{
-			parent::__construct();
-			$this->load->model('crud');
-			$this->load->database();
-			$this->load->model('webSessionManager');
+			$this->db = db_connect();
+			$this->webSessionManager = new WebSessionManager;
 			// basically the admin should be the one accessing this module
 			if ($this->webSessionManager->getCurrentUserprop('user_type')=='admin') {
-				loadClass($this->load,'role');
-				$role = new Role();
+				$role = loadClass('role');
 				$role->checkWritePermission();
 			}
 		}
 
-		public function edit($model,$id){
-
-		}
 		public function disable($model,$id){
-			$this->load->model("entities/$model");
+			$model = loadClass("$model");
 			//check that model is actually a subclass
-			if ( empty($id)===false && is_subclass_of($this->$model,'Crud' )) {
-				if($this->$model->disable($id,$this->db)){
+			if ( empty($id)===false && is_subclass_of($model,$this->crudNameSpace)) {
+				if($model->disable($id,$this->db)){
 
 					echo createJsonMessage('status',true,'message',"item disable successfully...",'flagAction',true);
 				}else{
-					echo createJsonMessage('status',false,'message',"cannot disable item...",'flagAction',true);
+					echo createJsonMessage('status',false,'message',"cannot disable item...",'flagAction',false);
 				}
 			}
 			else{
-				echo createJsonMessage('status',false,'message',"cannot disable item...",'flagAction',true);
+				echo createJsonMessage('status',false,'message',"cannot disable item...",'flagAction',false);
 			}
 		}
 		public function enable($model,$id){
-			$this->load->model("entities/$model");
+			$model = loadClass("$model");
 			//check that model is actually a subclass
-			if ( !empty($id) && is_subclass_of($this->$model,'Crud' ) && $this->$model->enable($id,$this->db)) {
+			if ( !empty($id) && is_subclass_of($model,$this->crudNameSpace ) && $model->enable($id,$this->db)) {
 				echo createJsonMessage('status',true,'message',"item enabled successfully...",'flagAction',true);
 			}
 			else{
-				echo createJsonMessage('status',false,'message',"cannot enable item...",'flagAction',true);
+				echo createJsonMessage('status',false,'message',"cannot enable item...",'flagAction',false);
 			}
 		}
 		public function view($model,$id){
 
 		}
+
+		public function truncate($model){
+			if($model){
+				$builder = $this->db->table($model);
+				if($builder->truncate()){
+					echo createJsonMessage('status',true,'message',"item successfully truncated...",'flagAction',true);
+				}else{
+					echo createJsonMessage('status',false,'message',"cannot truncate item...",'flagAction',false);
+				}
+			}
+		}
+
+		public function deleteModelByUserId($model,$field,$value){
+			$db=$this->db;
+		    $db->transBegin();
+		    $query="delete from $model where $field=?";
+		    if($db->query($query,[$value])){
+		        $db->transCommit();
+		        echo createJsonMessage('status',true,'message','item deleted successfully...','flagAction',true);
+		        return true;
+		    }
+		    else{
+		        $db->transRollback();
+		        echo createJsonMessage('status',false,'message','cannot delete item(s)...','flagAction',true);
+		        return false;
+		    }
+		}
+
 		public function delete($model,$extra='',$id=''){
 			//kindly verify this action before performing it
 			$id = ($id == '') ? $extra : $id;
 			$extra = ($extra != '' && $id != '') ? base64_decode(urldecode($extra)) : $id;
 			// this extra param is a method to find a file and removing it from the server
 			if($extra){
-				$this->load->model("entities/$model");
-				$paramFile = $model::$documentField;
+				$newModel = loadClass("$model");
+				$paramFile = $newModel::$documentField;
 				$directoryName = $model.'_path';
 				$filePath =  $this->uploadedFolderName.'/'.@$paramFile[$directoryName]['directory'].$extra;
 				if(file_exists($filePath)){
@@ -65,9 +95,9 @@
 					@unlink($filePath);
 				}
 			}
-			$this->load->model("entities/$model");
+			$newModel = loadClass("$model");
 			//check that model is actually a subclass
-			if ( !empty($id) && is_subclass_of($this->$model,'Crud' )&&$this->$model->delete($id)) {
+			if ( !empty($id) && is_subclass_of($newModel,$this->crudNameSpace )&&$newModel->delete($id)) {
 				$desc = "deleting the model $model with id {$id}";
 				$this->logAction($this->webSessionManager->getCurrentUserProp('ID'),$model,$desc);
 				echo createJsonMessage('status',true,'message','item deleted successfully...','flagAction',true);
@@ -83,11 +113,11 @@
 			// 1 => success
 			// 0 => not exists
 			// 2 => failed
-			$this->load->model("entities/$model");
+			$model = loadClass("$model");
 			//check that model is actually a subclass
-			if ( !empty($id) && is_subclass_of($this->$model,'Crud' )) {
-				if(!$this->$model->exists($id)){
-					$result = $this->$model->delete($id);
+			if ( !empty($id) && is_subclass_of($model,$this->crudNameSpace )) {
+				if(!$model->exists($id)){
+					$result = $model->delete($id);
 					return 'done'; // 1
 				}else{
 					return 'exists'; // 0
@@ -103,7 +133,7 @@
 				if(isset($_GET['task'])){
 					if($_GET['task'] === 'multipleDelete'){
 						try{
-							$model = $this->db->conn_id->escape_string(trim($model));
+							$model = $this->db->escape(trim($model));
 							$checkBoxData = json_decode($_GET['checkBoxAction'],true);
 							if(empty($checkBoxData)){
 								echo createJsonMessage('status',false,'message','You have not chosen any item to perform the operation upon...');
@@ -112,7 +142,7 @@
 
 							$result = '';
 							for($i=0; $i<count($checkBoxData); $i++){
-								$id = $this->db->conn_id->escape_string($checkBoxData[$i]['checkBoxData']);
+								$id = $this->db->escape($checkBoxData[$i]['checkBoxData']);
 								$result .= $this->multipleDelete($model,$id);
 							}
 
@@ -139,8 +169,8 @@
 		}
 
 		private function logAction($user,$model,$description){
-			loadClass($this->load,'application_log');
-			$this->application_log->log($user,$model,$description);
+			$applicationLog = loadClass('application_log');
+			$applicationLog->log($user,$model,$description);
 		}
 
 
