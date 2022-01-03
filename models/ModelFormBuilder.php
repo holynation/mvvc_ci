@@ -2,12 +2,15 @@
 /**
 *
 */
-class ModelFormBuilder extends CI_Model
+namespace App\Models;
+
+use CodeIgniter\Model;
+class ModelFormBuilder extends Model
 {
-private $cont ="mc";
+	private $cont ="mc";
 	private $link;
 	private $constructed;
-	private $models= array();
+	private $models= [];
 	private $count =0;
 	private $opened;
 	private $generated;
@@ -25,18 +28,23 @@ private $cont ="mc";
 	private $isAjax;
 	private $preview;
 	private $previewHtml="";
+	private $entitiesNameSpace = 'App\Entities\\';
+
 	function __construct()
 	{
-		parent::__construct();
-		$this->load->helper('url');
-		$this->load->helper('string');
+		helper(['string','url']);
 	}
+
 	private function createJSScript(){
 		$result = "<script>
 		\$(document).ready(function(){
 			\$('#{$this->formName}').submit(function(e){
 				addAsterisk();
 				e.preventDefault();
+				var btnSubmit = \$('input[type=submit]');
+				btnSubmit.addClass('disabled');
+      			btnSubmit.prop('disabled', true);
+      			btnSubmit.html('processsing...');
 				submitAjaxForm(\$(this));
 				// \$('#{$this->formName}').trigger('reset');
 
@@ -251,9 +259,10 @@ private $cont ="mc";
 		if ($isParent) {
 			$this->addParentTable($model);
 		}
+		$oldModel = $model;
+		$model = $this->entitiesNameSpace.$model;
 		$this->constructed.=empty($divider)?'':"<div class='form-divider'>$divider</div>";
-		// loadClass($this->load,$model);//load the needed model
-		$this->load->model('entities/'.$model);
+		$newModel = loadClass("$oldModel");
 		$this->addFormUploadProperty($model);
 		$fields = array_keys($model::$typeArray);
 		$result='';
@@ -281,7 +290,7 @@ private $cont ="mc";
 			if ($val ===null) {
 				continue;
 			}
-			$temp=$this->$model->$method($val);
+			$temp=$newModel->$method($val);
 			$result.=$temp;//call this method correctly
 			$result.="\n";
 			if (!empty($temp)) {//disregard method that generates empty value
@@ -314,32 +323,33 @@ private $cont ="mc";
 				throw new Exception("When combining multiple tables parent must be  set first");
 			}
 		}
+		$oldModel = $model;
+		$model = $this->entitiesNameSpace.$model;
 		//set the divided here
 		$this->constructed.=empty($divider)?'':"<div class='form-divider'>$divider</div>";
 		if ($isParent) {
 			$this->addParentTable($model);
 		}
-		$this->load->model('entities/'.$model);
+		$newModel = loadClass("$oldModel");
 		$this->addFormUploadProperty($model);
 		if($id instanceof $model){
 			$values=$id;
 		}
 		else{
-			$this->$model->ID = $id;
-			$this->$model->load();
-			$values = $this->$model;
+			$newModel->ID = $id;
+			$newModel->load();
+			$values = $newModel;
 		}
 		if (!$values || empty($values)) {
 			return $this;
 		}
-		//$values =$values->toArray();
 		$fields = array_keys($model::$typeArray);
 		$result='';
 		foreach ($fields as  $field) {
 			if ($field=='status' || in_array($field, $ignore)) {
 				continue;
 			}
-			if ($model != $this->parent && $this->common ==$field && empty($this->commonFieldSet) ) {//make sure there is no name conflict in the generated file
+			if ($oldModel != $this->parent && $this->common ==$field && empty($this->commonFieldSet) ) {//make sure there is no name conflict in the generated file
 				continue;
 			}
 			$method ='get'.ucfirst($field).'FormField';
@@ -352,13 +362,12 @@ private $cont ="mc";
 		}
 		$result.="\n";
 		$this->constructed.=$result;
-		if ($model=='payment_log') {
-			$this->models[$model]=array($this->count,$id->transaction_number);
+		if ($oldModel=='payment_log') {
+			$this->models[$oldModel]=array($this->count,$id->transaction_number);
 		}
 		else{
-			$this->models[$model]=array($this->count,$id instanceof $model?$id->ID:$id);
+			$this->models[$oldModel]=array($this->count,$id instanceof $model?$id->ID:$id);
 		}
-		// return $result;
 		return $this;
 	}
 

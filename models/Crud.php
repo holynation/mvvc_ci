@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use CodeIgniter\Model;
 use App\Entities;
 
 class Crud
@@ -11,11 +10,12 @@ class Crud
 	protected $foreignKeyEnd='_id';
 	static $baseurl;
 	protected $db;
+	private $entitiesNameSpace = 'App\Entities\\';
 	function __construct($array=array())
 	{
 		// parent::__construct();
 		if (!is_array($array)) {
-			throw new Exception("Constructor argument must be an array");
+			throw new \Exception("Constructor argument must be an array");
 		}
 		$this->array = $array;
 		helper(['string','text']);
@@ -78,8 +78,9 @@ class Crud
 			if (endsWith($field,$this->foreignKeyEnd)) {
 				$tablename = substr($field, 0,strlen($field)-strlen($this->foreignKeyEnd));
 				$tablename = strtolower($tablename);
+				$oldTableName = $tablename;
 				if (!class_exists($tablename)) {
-					$modelName = "Entities\\".$tablename;
+					$modelName = "App\\Entities\\".ucfirst($tablename);
 					$tablename = new $modelName;
 				}
 				if (isset($tablename::$displayField)) {
@@ -87,19 +88,19 @@ class Crud
 					if (is_array($tablename::$displayField)) {
 						$display="concat_ws(' '";
 						foreach ($tablename::$displayField as $tval) {
-							$display.=",".$tablename.'.'.$tval;
+							$display.=",".$oldTableName.'.'.$tval;
 						}
 						$display.=") as $field";
 					}
 					else{
 						$display =strtolower($tablename::$tablename).'.'.$tablename::$displayField.' as '.$field;
 					}
-					$foreignTable[]=$tablename;
-					$temp = $thisTable.'.'.$tablename.$this->foreignKeyEnd;
+					$foreignTable[]=$oldTableName;
+					$temp = $thisTable.'.'.$oldTableName.$this->foreignKeyEnd;
 					
-					$usse = isset($tablename::$joinField)?$tablename.'.'.$tablename::$joinField :"$tablename.ID";
+					$usse = isset($tablename::$joinField)?$oldTableName.'.'.$tablename::$joinField :"$oldTableName.ID";
 					
-					$onclause.=" left join $tablename on $temp =$usse ";
+					$onclause.=" left join $oldTableName on $temp =$usse ";
 					
 				}
 				else{
@@ -112,7 +113,6 @@ class Crud
 			}
 
 		}
-		// $onclause = substr($onclause, 0,strlen($onclause)-4);
 
 	}
 	//function to get arrayProperties
@@ -278,7 +278,7 @@ class Crud
 	protected function buildObject($classname,$result){
 		$objectArray =array();
 		if (!class_exists($classname)) {
-			$modelName = "Entities\\".$classname;
+			$modelName = "App\\Entities\\".ucfirst($classname);
 			$classname = new $modelName;
 		}
 		for ($i=0; $i < count($result); $i++) {
@@ -290,9 +290,9 @@ class Crud
 	function allNonObject(&$totalRow=0,$resolveForeign=true,$lower=0,$length=NULL,$sort='',$where=''){
 		$tablename =$this->getTableName();
 		$limit="";
-		$array=array();
+		$array=[];
 		if ($length!=NULL) {
-			$limit = " LIMIT ?,?";
+			$limit = " limit ?, ? ";
 			$array=array($lower,$length);
 		}
 		$query =$resolveForeign?$this->buildSelectClause()." $where $sort $limit":"SELECT SQL_CALC_FOUND_ROWS * FROM $tablename $where $sort $limit ";
@@ -306,13 +306,13 @@ class Crud
 	function all(&$totalRow=0,$resolveForeign=true,$lower=0,$length=NULL,$sort='',$where=''){
 		$tablename =$this->getTableName();
 		$limit="";
-		$array=array();
+		$array=[];
 		if ($length!=NULL) {
-			$limit = " LIMIT ?,?";
-			$array=array($lower,$length);
+			$limit = " limit ?, ? ";
+			$array=[$lower,$length];
 		}
 
-		$query =$resolveForeign?$this->buildSelectClause()." $where $sort $limit":"SELECT SQL_CALC_FOUND_ROWS * FROM $tablename $where $sort $limit ";
+		$query =$resolveForeign?$this->buildSelectClause()." {$where} {$sort} {$limit} ":"SELECT SQL_CALC_FOUND_ROWS * FROM $tablename $where $sort $limit ";
 		$result = $this->query($query,$array);
 		$result2 = $this->query("SELECT FOUND_ROWS() as totalCount");
 		$totalRow=$result2[0]['totalCount'];
@@ -413,7 +413,7 @@ class Crud
 				$id=$this->array['ID'];
 			}
 			else{
-				throw new Exception('please specify the index or set the index value as a parameter');
+				throw new \Exception('please specify the index or set the index value as a parameter');
 			}
 		}
 		$tablename=$this->getTableName();
@@ -423,7 +423,8 @@ class Crud
 			return false;
 		}
 		$result = $result[0];
-		$resultobject = new  $tablename($result);
+		$tablename = $this->entitiesNameSpace.$tablename;
+		$resultobject = new $tablename($result);
 		return $resultobject;
 	}
 	function load($id= null,&$dbObject= null){
@@ -440,17 +441,19 @@ class Crud
 		$tablename =$this->getTableName();
 		$result =$db->query($query,$data,$dbObject);
 		$resultObjects = array();
+		$tablename = $this->entitiesNameSpace.$tablename;
 		foreach ($result as $value) {
 			$resultObjects[] = new $tablename($value);
 		}
 		return $resultObjects;
 	}
 
-	function query($query,$data=array(),&$dbObject=null){
+	function query($query,$data=[],&$dbObject=null){
 		$db=$this->db;
 		if ($dbObject!=null) {
 			$db=$dbObject;
 		}
+		// echo $query;exit;
 		$result =$db->query($query,$data);
 		if (!is_object($result)) {
 			return $result;
@@ -461,7 +464,7 @@ class Crud
 
 	function update($id=NULL,&$dbObject=null){
 		if (empty($id) && !isset($this->array['ID'])) {
-			throw new Exception("null id field found");
+			throw new \Exception("null id field found");
 		}
 		
 		
@@ -525,7 +528,7 @@ class Crud
 
 	function insert(&$dbObject=null,&$message=''){
 		if (empty($this->array)) {
-			throw new Exception("no value to insert");
+			throw new \Exception("no value to insert");
 		}
 		if ($this->checkExist()) {
 			$checkMsg = $this->checkExist();
@@ -563,7 +566,7 @@ class Crud
 
 	function delete($id=NULL,&$dbObject=NULL){
 		if ($id==NULL && !isset($this->array['ID'])) {
-			throw new Exception("object does not have id");
+			throw new \Exception("object does not have id");
 		}
 		if ($id ==NULL) {
 			$id = $this->array["ID"];
@@ -575,7 +578,7 @@ class Crud
 	}
 	public function enable($id=null,&$dbObject=null){
 		if ($id==NULL && !isset($this->array['ID'])) {
-			throw new Exception("object does not have id");
+			throw new \Exception("object does not have id");
 		}
 		if ($id ==NULL) {
 			$id = $this->array["ID"];
@@ -584,7 +587,7 @@ class Crud
 	}
 	public function disable($id=null,&$dbObject=null){
 		if ($id==NULL && !isset($this->array['ID'])) {
-			throw new Exception("object does not have id");
+			throw new \Exception("object does not have id");
 		}
 		if ($id ==NULL) {
 			$id = $this->array["ID"];
@@ -834,7 +837,7 @@ class Crud
 			$passwordIndex = array_search('password', $fields);
 			if ($passwordIndex == false) {
 				// $fields[]='password';
-				throw new Exception("there is no password field to hash so set the user field currectly.", 1);
+				throw new \Exception("there is no password field to hash so set the user field currectly.", 1);
 			}
 			$usernameIndex = array_search('username', $fields);
 		}
@@ -1018,7 +1021,7 @@ class Crud
 		$tables = array_keys($temp);
 		array_unshift($tables, $mainTable);
 		if (empty($tables)) {
-			throw new Exception("error while processing kindly check your code and the model file.", 1);
+			throw new \Exception("error while processing kindly check your code and the model file.", 1);
 		}
 		$parents = empty($ending)?array():array_keys($ending);
 		$result = $tables[0];
