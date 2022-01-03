@@ -1,7 +1,6 @@
 <?php 
 //this function checks if an array is sequential or not
 //returns -1 if array is null 0 if not sequential and 1 if it is
-
 function isSequential($array){
 	if (empty($array)) {
 		return -1;
@@ -20,7 +19,7 @@ function subArrayAssoc($array,$start,$len){
 	$count = count($array);
 	$validity = $count - ($start + $len);//confirmed
 	if ($validity < 0) {
-		throw new Exception("error occur validity=$validity count is $count", 1);
+		throw new \Exception("error occur validity=$validity count is $count", 1);
 		
 		return false;
 	}
@@ -30,6 +29,126 @@ function subArrayAssoc($array,$start,$len){
 	for ($i=$start; $i < ($start + $len); $i++) { 
 		$key = $keys[$i];
 		$result[$key] =$array[$key];
+	}
+	return $result;
+}
+
+function loadChoices($scope,$table)
+{
+	$oldTable = $table;
+	$table = "App\\Entities\\".$table;
+	$displayField = isset($table::$displayField)?$table::$displayField:false;
+	$tableKey = getTableKey();
+	if (!$displayField) {
+		$displayField='name';
+	}
+	if ($oldTable=='customer') {
+		$displayField=" concat_ws(' ',firstname,middlename,lastname) ";
+	}
+	if (is_array($displayField)) {
+		$tempAdd = implode(',', $displayField);
+		$displayField="concat_ws(' ',$tempAdd)";
+	}
+	$query="select {$tableKey} as id,$displayField as value from $oldTable";
+	$result = $scope->query($query);
+	$result = $result->getResultArray();
+	return $result;
+}
+
+function getStructure($scope,$entity)
+{
+	$result = array();
+	$entity = loadClass("$entity");
+	$labels = $entity::$typeArray;
+	$nullArray = $entity::$nullArray;
+	$relation = $entity::$relation;
+	$labelArray = $entity::$labelArray;
+	$actions = $entity::$tableAction;
+	$relationDictionary = getEntityDirectRelation($scope,$relation);
+	foreach ($labels as $label => $value) {
+		if ($label=='ID' || $label=='date_created' || $label=='customer_order_id' || $label=='delivery_id') {
+			continue;
+		}
+		$param= array();
+		
+		if (!in_array($label, $nullArray)) {
+			$param['required']=1;
+		}
+		$param['type']= getFieldType($label,$value);
+		$title =(array_key_exists($label, $labelArray) && trim($labelArray[$label]))?$labelArray[$label]:$label;
+		$param['label']=$title;
+		$param['relation']='';
+		if (array_key_exists($label, $relationDictionary)) {
+			$param['relation']=$relationDictionary[$label];
+			$param['choices']=loadChoices($scope,$param['relation']);
+		}
+		// $param['relation']=$this->getAllDirectRelation($label,$relation);
+		$param['value']='';
+		// if ($param['type']=='select' && $param['relation']) {
+		// 	# code...
+		// }
+		$result[$label]=$param;
+	}
+	return $result;
+}
+
+function getBulkUploadFields($scope,$entity)
+{
+	$entity = loadClass("$entity");
+	if (!property_exists($entity,'bulkUploadField')) {
+		return false;
+	}
+	return $entity::$bulkUploadField;
+}
+
+function getFieldType($label,$value)
+{
+	if ($value=='varchar' || $value=='int') {
+		if (endsWith($label,getForeignKeyAppend())) {
+			return 'select';
+		}
+		if (strpos(strtolower($label), 'mail')!==false) {
+			return 'email';
+		}
+
+		if (strpos(strtolower($label), 'phone')!==false) {
+			return 'phone';
+		}
+		if (strpos(strtolower($label), 'date')!==false) {
+			return 'date';
+		}
+		if (strpos(strtolower($label), 'path')!==false || strpos(strtolower($label), 'image')!==false || strpos(strtolower($label), 'file')!==false || strpos(strtolower($label), 'document')!==false) {
+			return 'file';
+		}
+	}
+	if ($value=='timestamp') {
+		return 'date';
+	}
+	if ($value=='text') {
+		return 'text';
+	}
+
+	return 'simple';
+}
+
+function getTableKey()
+{
+	return 'ID';
+}
+
+function getForeignKeyAppend()
+{
+	return '_id';
+}
+function getEntityDirectRelation($scope,$relations)
+{
+	$result = array();
+	$tableKey = getTableKey();
+	foreach ($relations as $label => $relation) {
+		$temp = @$relation[0];
+		if ($temp && is_string($temp) && $temp!=$tableKey) {
+			$result[$temp]=$label;
+		}
 	}
 	return $result;
 }
@@ -50,7 +169,7 @@ function subArray($array,$start,$len){
 }
 
 function exception_error_handler($errno, $errstr, $errfile, $errline ) {
-	throw new ErrorException($errstr, $errno, 0, $errfile, $errline);
+	throw new \ErrorException($errstr, $errno, 0, $errfile, $errline);
 }
 function replaceIndexWith(&$array,$index,$value){
 	for ($i=0; $i < count($array); $i++) { 
@@ -178,11 +297,6 @@ function removeEmptyAssoc($arr)
 {
 	$result = array();
 	foreach ($arr as $key => $value) {
-		// this is to skip and validate an array value 
-		if(is_array($value)){
-			$result[$key] = $value;
-			continue;
-		}
 		if (trim($value)!=='') {
 			$result[$key]=$value;
 		}
@@ -222,16 +336,63 @@ function removeValue($arr,$val)
 	return $result;
 }
 
-function fetchField($array,$field)
+function listAPIEntities($db)
 {
-	$result = array();
-	if ($array) {
-		foreach ($array as $val) {
-			$result[]=$val[$field];
+	$exemptions = array('user','customer','order_payment','commission','role','supplier','errand_payment','dispatcher');
+	$query='show tables';
+	$dbResult = $db->query($query);
+	$dbResult = $dbResult->getResultArray();
+	$result=array();
+	foreach ($dbResult as $res) {
+		$temp = reset($res);
+		if (in_array($temp, $exemptions)) {
+			continue;
 		}
+		$result[]=$temp;
 	}
 	return $result;
 }
 
+function listEntities($db)
+{
+	$query='show tables';
+	$dbResult = $db->query($query);
+	$dbResult = $dbResult->getResultArray();
+	$result=array();
+	foreach ($dbResult as $res) {
+		$result[]=reset($res);
+	}
+	return $result;
+}
 
+function getAPIEntityTranslation($value='')
+{
+	# this gets the translation from the database
+	$result = array(
+		'users'=>'admin',
+		'products'=>'product',
+		'errand_rating'=>'customer_errand_rating',
+		'unit'=>'measurement',
+		'request_change'=>'requestPasswordReset',
+		'change_pass'=>'changePassword'
+	);
+	return $result;
+}
+
+function getEntityTranslation()
+{
+	# this gets the translation from the database
+	$result = array(
+		'users'=>'admin',
+		'products'=>'product',
+		'errand_rating'=>'customer_errand_rating',
+		'unit'=>'measurement'
+	);
+	return $result;
+}
+//the set of methods that are allowed for the api to access and the translation for those that has translation
+function getDeniedApiMethods()
+{
+	$result = array('user','customer_login','');
+}
 ?>
