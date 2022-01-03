@@ -2,33 +2,44 @@
 /**
 * 
 */
-class Auth extends CI_Controller
+namespace App\Controllers;
+
+use App\Models\WebSessionManager;
+use App\Models\User;
+use App\Models\Mailer;
+
+class Auth extends BaseController
 {
 	// I WANNA ADD THE SECURITY CHECK TO SOME MODEL IN THE CODE BASE,USING NERMES THAT I READ IN THE FIREFOX BOOKMARK
-	// I ALSO WANNA LOOK INTO SOME MINOR ISSUE RELATION TO REDIRECTION IN JAVASCRIPT
+
+	private $user;
+	private $webSessionManager;
+	private $mailer;
+	private $db;
 
 	function __construct()
 	{
-		parent::__construct();
-		$this->load->model('entities/user');
-		$this->load->model('webSessionManager');
-		$this->load->library('hash_created');
-		$this->load->library('cookie_created');
-		$this->load->helper('cookie');
-		$this->load->model('mailer');
+		helper(['cookie','string']);
+
+		$this->user = new User;
+		$this->webSessionManager = new WebSessionManager;
+		$this->mailer = new Mailer;
+		$this->db = db_connect();
 	}
 
 	public function signup($data = ''){
-		$this->load->view('cashback/signup', $data);
+		echo view('signup', $data);
 	}
 
 	public function login($data = ''){
-		$this->load->view('cashback/login', $data );
+		echo view('login', $data );
 	}
 
 	public function forget($data = ''){
-		$this->load->view('cashback/forget_password',$data);
+		echo view('forget_password',$data);
 	}
+
+	//TODO: FIXING EVERY POST INPUT FOR AUTHENTICATION
 
 	public function register(){
 		if(isset($_POST) && count($_POST) > 0 && !empty($_POST)){
@@ -115,13 +126,13 @@ class Auth extends CI_Controller
 					return;
 				}else{
 					$this->webSessionManager->setFlashMessage('error','Please fill all field and try again');
-					redirect(base_url('/auth/login'));
+					redirect(base_url('auth/login'));
 				}
 				
 			}
 			$find = $this->user->findBoth($username);
 			if($find){
-				$checkPass=$this->hash_created->decode_password(trim($password), $this->user->data()[0]['password']);
+				$checkPass=decode_password(trim($password), $this->user->data()[0]['password']);
 				if(!$checkPass){
 					if ($isAjax) {
 						$arr['status']=false;
@@ -131,7 +142,7 @@ class Auth extends CI_Controller
 					}
 					else{
 						$this->webSessionManager->setFlashMessage('error','invalid email or password');
-						redirect(base_url('/auth/login'));
+						redirect(base_url('auth/login'));
 					}
 				}
 				$array = array('username'=>$username,'status'=>1);
@@ -169,7 +180,7 @@ class Auth extends CI_Controller
 					echo json_encode($arr);exit;
 				}else{
 					$this->webSessionManager->setFlashMessage('error','invalid email or password');
-					redirect(base_url('/auth/login'));
+					redirect(base_url('auth/login'));
 				}
 				
 			}
@@ -199,8 +210,8 @@ class Auth extends CI_Controller
 			return;
 		}
 		//this will just generate the token and send to the email address
-		loadClass($this->load,'customer');
-		$customer=$this->customer->getWhere(array('email'=>$email));
+		$customer = loadClass('customer');
+		$customer=$customer->getWhere(array('email'=>$email));
 		$customer = is_array($customer)?$customer[0]:$customer;
 		if (!$customer) {
 			$arr['status'] = false;
@@ -218,10 +229,10 @@ class Auth extends CI_Controller
 			return;
 		}
 		//save the OTP and send the mail
-		loadClass($this->load,'password_otp');
-		$this->password_otp->otp=$otp;
-		$this->password_otp->customer_id=$customer->ID;
-		if (!$this->password_otp->insert()) {
+		$passwordOtp = loadClass('password_otp');
+		$passwordOtp->otp=$otp;
+		$passwordOtp->customer_id=$customer->ID;
+		if (!$passwordOtp->insert()) {
 			$arr['status'] = false;
 			$arr['message'] = 'an error occured while saving the token';
 			echo json_encode($arr);
@@ -251,8 +262,8 @@ class Auth extends CI_Controller
 			return;
 		}
 
-		loadClass($this->load,'customer');
-		$customer =$this->customer->getWhere(array('email'=>$email));
+		$customer = loadClass('customer');
+		$customer =$customer->getWhere(array('email'=>$email));
 		$customer = is_array($customer)?$customer[0]:$customer;
 		if (!$customer) {
 			displayJson(false,'sorry, an invalid operation...');
@@ -262,7 +273,7 @@ class Auth extends CI_Controller
 			displayJson(false,'sorry an invalid code was provided.');
 			return;
 		}
-		$password = $this->hash_created->encode_password($password);
+		$password = encode_password($password);
 		$newUser = $this->user->getWhere(array('user_table_id'=>$customer->ID,'user_type'=>'customer'),$count,0,1,false);
 		if (!$newUser){
 			displayJson(false,"sorry,user can't be verified...");
@@ -275,7 +286,7 @@ class Auth extends CI_Controller
 			return;		
 		}
 		$customer->disableAllPasswordOTPs();
-		$accSubject = "9jaCashBack Password Recovery Success";
+		$accSubject = "Password Recovery Success";
 		$this->mailer->sendPasswordResetSuccess($customer);
 		displayJson(true,"Your password has been reset! You may now login.");
 		return;
@@ -284,14 +295,15 @@ class Auth extends CI_Controller
 	private function verifyPasswordOTP($customer,$otp)
 	{
 		// the otp can only last 1hr
-		$otp =$this->db->conn_id->escape_string($otp);
+		$otp =$this->db->escape_string($otp);
 		$query="select * from password_otp where customer_id=? and otp=? and status=0 and timestampdiff(MINUTE,date_created,current_timestamp) <=120 order by ID desc limit 1";
-		$result = $this->db->query($query,array($customer->ID,$otp));
-		$result = $result->result_array();
+		$result = $this->db->query($query,[$customer->ID,$otp]);
+		$result = $result->getResultArray();
 		return $result;
 	}
 
 	// here is where user can go to their mail and use a link to reset mail
+	// trying to change the email being used here
 	public function forgetPassword(){
 		if(isset($_POST) && count($_POST) > 0 && !empty($_POST)){
 			if($_POST['task'] == 'reset'){
@@ -444,11 +456,12 @@ class Auth extends CI_Controller
 		$this->webSessionManager->logout();
 		$path = $base.$link;
 		// destroying the cookie if exist
+		$config = config('cookie');
 		$id = $this->webSessionManager->getCurrentUserProp('ID');
-		if($this->cookie_created->exists($this->config->item('cookie_name'))){
+		if(has_cookie($config->cookieName)){
         	$this->db->delete('users_session', array('user_id' => $id));
         	// $this->cookie_created->delete($this->config->item('cookie_name'));
-        	delete_cookie($this->config->item('cookie_name'));
+        	delete_cookie($config->cookieName);
         }
 		header("location:$path");exit;
 	}
