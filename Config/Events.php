@@ -48,3 +48,13 @@ Events::on('pre_system', static function () {
         Services::toolbar()->respond();
     }
 });
+
+// Events::on('post_controller_constructor' , function(...$params){
+//     //  this is use to always get php input as an array since the incoming data is in json 
+//     $fileData = file_get_contents('php://input');
+//     if (!$fileData) {
+//         return;
+//     }
+//     $data = json_decode($fileData, true);
+//     $_POST = $data;
+// });
