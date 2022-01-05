@@ -2,9 +2,6 @@
 
 namespace App\Controllers;
 
-use Firebase\JWT\JWT;
-use App\Models\Crud;
-use App\Entities\User;
 use App\Models\WebSessionManager;
 use App\Models\EntityModel;
 use App\Models\ApiModel;
@@ -14,7 +11,6 @@ class Api extends BaseController
 {
     protected $db;
     private $webSessionManager;
-    private $user;
     private $entityModel;
     private $apiModel;
     private $webApiModel;
@@ -24,47 +20,6 @@ class Api extends BaseController
         helper(['array','string']);
         $this->db = db_connect();
         $this->webSessionManager = new WebSessionManager;
-        $this->user = new User;
-    }
-
-    public function web(){
-        $username = $this->request->getPost('username');
-        $password = $this->request->getPost('password');
-
-        if (!($username || $password)) {
-            $response= json_encode(array('status'=>false,'message'=>"invalid entry data"));
-            echo $response;
-            return;
-        }
-        if (!filter_var($username, FILTER_VALIDATE_EMAIL)) {
-          $response= json_encode(array('status'=>false,'message'=>"invalid email address"));
-          echo $response;
-          return;
-        }
-
-        $array = array('username'=>$username,'status'=>1);
-        $user = $this->user->getWhere($array);
-        if ($user==false) {
-            $response = array('status'=>false,'message'=>'invalid username or password');
-            echo json_encode($response);
-            return;             
-        }
-        else{
-            $user = $user[0];
-            if (!password_verify($password, $user->password)) {
-                $response = array('status'=>false,'message'=>'invalid username or password');
-                echo json_encode($response);
-                return; 
-            }
-            $baseurl = base_url();
-            $this->webSessionManager->saveCurrentUser($user,true);
-            $baseurl.=$this->getUserPage($user);//'statics/sample';//redirect to the original dashboard page;
-            // $this->application_log->log('login','user logged in successfully');
-            $arr['status']=true;
-            $arr['message']= $baseurl;
-            echo  json_encode($arr);
-            return;
-        }
     }
 
     private function validateWebApiAccess($value='')
