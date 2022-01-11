@@ -2,42 +2,41 @@
 /**
 * This is the class that manages all information and data retrieval needed by the admin section of this application.
 */
-class AdminData extends CI_Model
-{
+namespace App\Models\Custom;
+
+use CodeIgniter\Model;
+use App\Models\WebSessionManager;
+
+class AdminData extends Model
+{	
+	protected $db;
+	private $webSessionManager;
+
 	function __construct()
 	{
-		parent::__construct();
+		helper('string');
+		$this->db = db_connect();
+		$this->webSessionManager = new WebSessionManager;
 	}
 
 	public function loadDashboardData()
 	{
 		//check the permmission first
 		$result = array();
-		loadClass($this->load,'customer');
-		loadClass($this->load,'admin');
-		loadClass($this->load,'cashback');
-		loadClass($this->load,'payment');
-		$result['countData']=array('customer'=>$this->customer->totalCount("where status = '1'"),'admin'=>$this->admin->totalCount(),'cashback_activate'=>$this->cashback->totalCount("where payment_status = '1'"),'cashback_not_acitvate'=>$this->cashback->totalCount("where payment_status = '0'"),'payment'=>$this->payment->totalAmount(),'cash_profile'=>$this->cashback->totalCount("where cashback_type = 'profile'"),'cash_phone'=>$this->cashback->totalCount("where cashback_type = 'phone_number'"));
+
+		// passing admin data value to array
+		$result['countData']=array('totalSubscribers'=>$customer->totalCustomerSubscribers());
+
 		//load the data needed to display graphical information
-		$result['eventDistribution']=$this->payment->getEventDistributionByPayment();
-		$result['cashbackDistribution']=$this->cashback->getCashbackDistribution();
-		$result['cashbackTranxDistribution']=$this->cashback->getCashbackTranxDistribution();
+		$result['countByDevicesDistribution2'] = $admin->countDevicesByType('company_devices',$taskType);
 		// print_r($result);exit;
 		return $result;
 	}
 
-	public function getDailyWinner(){
-		loadClass($this->load, 'cashback');
-        $cashback = new Cashback();
-        $result = $cashback->checkMyLuckyNumber();
-        // print_r($result);exit;
-        return $result;
-	}
-
 	public function getAdminSidebar($combine = false)
 	{
-		loadClass($this->load,'role');
-		$role = new Role();
+		$role = loadClass('role');
+		$role = new $role();
 		// using $combine parameter to take into consideration path that're not captured in the admin sidebar
 		$output = ($combine) ? array_merge($role->getModules(),$role->getExtraModules()) : $role->getModules();
 		return $output;

@@ -3,31 +3,44 @@
 * The controller that link to the model.
 *all response in this class returns a json object return
 */
+namespace App\Controllers;
 
-class ModelController extends CI_Controller
+use App\Models\WebSessionManager;
+use App\Models\AccessControl;
+use App\Models\ModelControllerCallback;
+use App\Models\ModelControllerDataValidator;
+
+class Modelcontroller extends BaseController
 {
 	private $_rootUploadsDirectory = "writable/uploads/";
 	// RULE: date_created comes first,then date_modified or any named date
 	// NOTE: it only accept two diff date,nothing more than that.
 	private $_dateParam = array('company_device'=> array('date_created','date_updated'), 'default' => array('date_created','date_modified'));
+	private $accessControl;
+	private $webSessionManager;
+	private $modelControllerCallback;
+	private $modelControllerDataValidator;
+	private $db;
+	private $crudNameSpace = 'App\Models\Crud';
 
 	function __construct()
 	{
-		parent::__construct();
-		$this->load->model('accessControl');//for authentication authorization validation
-		// $this->load->model('entities/application_log');
-		$this->load->helper('array');
-		$this->load->helper('string');
-		$this->load->model('modelControllerDataValidator');
-		$this->load->model('webSessionManager');
-		$this->load->model('modelControllerCallback');
-		$this->load->model('entities/role');
+		helper(['array','string']);
+
+		$this->accessControl = new AccessControl; //for authentication authorization validation
+		$this->modelControllerCallback = new ModelControllerCallback;
+		$this->modelControllerDataValidator = new ModelControllerDataValidator;
+		$this->webSessionManager = new WebSessionManager;
+		$this->db = db_connect();
+
+		$role = loadClass('role');
 		if ($this->webSessionManager->getCurrentuserProp('user_type')=='admin') {
-			$this->role->checkWritePermission();
+			$role->checkWritePermission();
 		}
 		
 	}
 
+	// TODO: LOOK INTO  WHAT THIS METHOD IS ACTUALLY DOING IN REALITY
 	//function that will enable the ajax call and return just the table content by passing the url link
 	function tableContent($model,$start=0,$len=100,$paged=false){
 		if (!$this->isModel($model)) {
@@ -40,7 +53,8 @@ class ModelController extends CI_Controller
 		$this->load->view('pages/modelTableView',$data);
 	}
 
-	function add($model,$filter=false,$parent='',$noArrSkip=false){//the parent field is optional
+	function add($model,$filter=false,$parent='',$noArrSkip=false){
+	//the parent field is optional
 		try{
 			if (empty($model)) { //make sure empty value for model is not allowed.
 				echo createJsonMessage('status',false,'message','an error occured while processing information','description','the model parameter is null so it must not be null');
@@ -59,7 +73,7 @@ class ModelController extends CI_Controller
 		}
 		catch(Exception $ex){
 			echo $ex->getMessage();
-			$this->db->trans_rollback();
+			$this->db->transRollback();
 		}
 
 	}
@@ -83,34 +97,32 @@ class ModelController extends CI_Controller
 			exit;
 		}
 		$inTable =array_key_exists($parentName, $models);
-		$this->db->trans_begin();//start transaction
-		$data = $this->input->post(null,$filter);
+		$this->db->transBegin();//start transaction
+		$data = $this->request->post(null);
 		$parentValue=@$data[$parent];
 		$isFirst=true;
 		$insertids='';
 		$message='';
 		foreach ($models as $model => $prop) {
 			if (is_array($prop) || !is_int($prop)) {
-				$this->db->trans_rollback();
+				$this->db->transRollback();
 				throw new Exception("invalid model properties");
 			}
-			if (!class_exists(ucfirst($model))) {
-				$this->load->model("entities/$model");
-			}
+			$newModel = loadClass("$model");
 			$data = $this->processFormUpload($model,$data,false);
-			$parameter = $this->extractSubset($data,$model);
+			$parameter = $this->extractSubset($data,$newModel);
 			$parameter = removeEmptyAssoc($parameter);
 			if (!$this->validateModelData($model,'insert',$parameter,$message)) {
-				$this->db->trans_rollback();
+				$this->db->transRollback();
 				echo createJsonMessage('status',false,'message',$message);
 				return;
 			}
 			$parentSet= false;
 			if ($parentName==$model || $isFirst) {//if this is the parent or the first table
-				$this->$model->setArray($parameter);
-				if(!$this->$model->insert($this->db,$message)){
+				$this->$newModel->setArray($parameter);
+				if(!$this->$newModel->insert($this->db,$message)){
 					//if tere is any problem with the current insertion just remove rollback the transaction and  exit with error that will be faster.
-					$this->db->trans_rollback();
+					$this->db->transRollback();
 					echo createJsonMessage('status',false,'message',$message);
 					return false;
 					// break;
@@ -131,12 +143,12 @@ class ModelController extends CI_Controller
 			if ($model=='next_of_kin') {
 				unset($parameter['guardian_ID']);
 			}
-			$this->$model->setArray($parameter);
-			$this->$model->insert($this->db);
+			$this->$newModel->setArray($parameter);
+			$this->$newModel->insert($this->db);
 			$prevCount=$prop;
 		}
-		if ($this->db->trans_status() === FALSE) {
-			$this->db->trans_rollback();
+		if ($this->db->transStatus() === FALSE) {
+			$this->db->transRollback();
 			$message = empty($message)?'error occured while inserting record':$message;
 			echo createJsonMessage('status',false,'message',$message);
 			// $this->log($desc,$message);
@@ -145,13 +157,12 @@ class ModelController extends CI_Controller
 		//load the insert many method here before the db is committed so that the transaction is atomic.
 		$data['LAST_INSERT_ID']= $insertids;
 		if($this->afterManyInserts(array_keys($models),'insert',$data,$this->db)){
-			$this->db->trans_commit();//end the transaction
-			// $result = array('status'=>)
+			$this->db->transCommit();//end the transaction
 			echo createJsonMessage('status',true,'message','records inserted successfully','data',$parentValue);
 			// $this->log($desc," $desc Inserted");
 			return true;
 		}
-		$this->db->trans_rollback();
+		$this->db->transRollback();
 		echo createJsonMessage('status',false,'message','error occured while inserting records');
 		// $this->log($desc," error inserting $desc");
 		return false;
@@ -186,22 +197,21 @@ class ModelController extends CI_Controller
 			return;
 		}
 		// $inTable =array_key_exists($parentName, $models);
-		$this->db->trans_begin();//start transaction
-		$data = $this->input->post(null,$filter);
+		$this->db->transBegin();//start transaction
+		$data = $this->request->post(null);
 		$parentValue=isset($data[$parent])?$data[$parent]:false;
 		$isFirst = true;
 		foreach ($models as $model => $prop) {
 			if (empty($prop) || !is_array($prop) || count($prop)!=2) {
-				$this->db->trans_rollback();
+				$this->db->transRollback();
 				throw new Exception("invalid model properties");
 			}
 			//load the model
-			$this->load->model("entities/$model");
-			// $parameter = subArrayAssoc($data,$prevCount,$prop[0]-$prevCount);
+			$newModel = loadClass("$model");
 			$data = $this->processFormUpload($model,$data,$prop[1]);
-			$parameter = $this->extractSubset($data,$model);
+			$parameter = $this->extractSubset($data,$newModel);
 			if (empty($parameter) || $this->validateModelData($model,'update',$parameter,$message)==false) {
-				$this->db->trans_rollback();
+				$this->db->transRollback();
 				if (empty($message)) {
 					$message ='error occured while performing operation';
 				}
@@ -209,9 +219,9 @@ class ModelController extends CI_Controller
 
 			}
 			if ($parentName==$model || $isFirst) {//this is the first transaction
-				$this->$model->setArray($parameter);
+				$this->$newModel->setArray($parameter);
 			
-				$this->$model->update($prop[1],$this->db);
+				$this->$newModel->update($prop[1],$this->db);
 				$prevCount=$prop[0];
 				$isFirst= false;
 				continue;
@@ -223,27 +233,27 @@ class ModelController extends CI_Controller
 				unset($parameter['guardian_ID']);
 			}
 
-			$this->$model->setArray($parameter);
-			$this->$model->update($prop[1],$this->db);
+			$this->$newModel->setArray($parameter);
+			$this->$newModel->update($prop[1],$this->db);
 			$prevCount=$prop[0];
 		}
 
-		if ($this->db->trans_status() === FALSE) {
+		if ($this->db->transStatus() === FALSE) {
 			echo createJsonMessage('status',true,'message','error occured while updating record');
 			return false;
 		}
 		if($this->afterManyInserts(array_keys($models),'update',$data,$this->db)){
-			$this->db->trans_commit();//end the transaction
+			$this->db->transCommit();//end the transaction
 			echo createJsonMessage('status',true,'message','records updated successfully','data',$parentValue);
 			return true;
 		}
-		$this->db->trans_rollback();
+		$this->db->transRollback();
 		echo createJsonMessage('status',false,'message','error occured while updating record');
 		return false;
 	}
 
 	//this function is used to  document
-	private function processFormUpload($model,$parameter,$insertType=false){
+	private function processFormUpload(string $model,$parameter,$insertType=false){
 		$paramFile= $model::$documentField;
 		$fields = array_keys($_FILES);
 		if (empty($paramFile) || empty($_FILES)) {
@@ -263,9 +273,9 @@ class ModelController extends CI_Controller
 				extract($value);
 
 				$method ="get".ucfirst($model)."Directory";
-				$this->load->model('uploadDirectoryManager');
-				if (method_exists($this->uploadDirectoryManager, $method)) {
-					$dir  = $this->uploadDirectoryManager->$method($parameter);
+				$uploadDirectoryManager = loadClass('uploadDirectoryManager');
+				if (method_exists($uploadDirectoryManager, $method)) {
+					$dir  = $uploadDirectoryManager->$method($parameter);
 					if ($dir===false) {
 						exit(createJsonMessage('status',false,'message','Error while uploading file'));
 					}
@@ -387,7 +397,7 @@ class ModelController extends CI_Controller
 			// this means that it is updating
 			$query="select $name from $model where id = ?";
 			$result = $this->db->query($query,array($id));
-			$result=$result->result_array();
+			$result=$result->getResultArray();
 			
 			// the return message 'insert' is a rare case whereby there is no media file at first
 			// yet one want to add the media file through update action
@@ -397,7 +407,7 @@ class ModelController extends CI_Controller
 			// this means it is inserting
 			$query="select id from $model order by id desc limit 1";
 			$result = $this->db->query($query);
-			$result=$result->result_array();
+			$result=$result->getResultArray();
 			if ($result) {
 				return $result[0]['id'];
 			}
@@ -416,7 +426,7 @@ class ModelController extends CI_Controller
 		}
 		
 		if (!is_uploaded_file($_FILES[$name]['tmp_name'])) {
-			$this->db->trans_rollback();
+			$this->db->transRollback();
 			$message='uploaded file not found';
 			return false;
 		}
@@ -432,14 +442,6 @@ class ModelController extends CI_Controller
 		$method = 'on'.ucfirst($model).'Inserted';
 		if (method_exists($this->modelControllerCallback, $method)) {
 			return $this->modelControllerCallback->$method($data,$type,$db,$message,$redirect);
-		}
-		return true;
-	}
-
-	private function suspendAfterInsertionResult($model,$type,$data,&$db,&$message=''){
-		$method = 'on'.ucfirst(($model)).'Suspend';
-		if(method_exists($this->modelSuspendCallback, $method)){
-			return $this->modelSuspendCallback->$method($data,$type,$db,$message);
 		}
 		return true;
 	}
@@ -491,17 +493,17 @@ class ModelController extends CI_Controller
 		$message ='';
 		$filter = (bool)$filter;
 		$noArrSkip = (bool)$noArrSkip; // this is use to allow extra param array if needed later in the code
-		$data = $this->input->post(null,$filter);
+		$data = $this->request->post(null);
 		$data = $this->processFormUpload($model,$data,false);
 		if (in_array('password', array_keys($data))) {
 			$data['password']=@md5($data['password']);
 		}
 		unset($data["edu-submit"]);
-		$this->load->model("entities/$model");
+		$newModel = loadClass("$model");
 		$parameter=$data;
 		// this is allow param not stated in the entity typeArray property to pass through without being removed from the array
 		if(!$noArrSkip){
-			$parameter = $this->extractSubset($parameter,$model);
+			$parameter = $this->extractSubset($parameter,$newModel);
 		}
 		$parameter = removeEmptyAssoc($parameter);
 		if ($this->validateModelData($model,'insert',$parameter,$message)==false) {
@@ -537,21 +539,20 @@ class ModelController extends CI_Controller
 			$parameter[$dateParam[1]] = date('Y-m-d H:i:s');
 		}
 		
-		$this->$model->setArray($parameter);
-		if (!$this->validateModel($model,$message)) {
+		$this->$newModel->setArray($parameter);
+		if (!$this->validateModel($newModel,$message)) {
 			echo createJsonMessage('status',false,'message',$message);
 			return;
 		}
 		$message = '';
-		$this->db->trans_begin();
-		if($this->$model->insert($this->db,$message)){
+		$this->db->transBegin();
+		if($this->$newModel->insert($this->db,$message)){
 			$inserted = $this->getLastInsertId($this->db);
 			$data['LAST_INSERT_ID']= $inserted;
 
 			if($this->DoAfterInsertion($model,'insert',$data,$this->db,$message,$redirect)){
-				$this->db->trans_commit();
+				$this->db->transCommit();
 				if($redirect != ''){
-					// echo createJsonMessage('status',true,'message',$redirect);
 					$arr = array();
 					$arr['status'] = true;
 					$arr['message'] = $redirect;
@@ -563,9 +564,8 @@ class ModelController extends CI_Controller
 				// $this->log($model,"inserted new $model information");//log the activity
 				return;
 			}
-			// echo createJsonMessage('status',false,'message',$message);
 		}
-		$this->db->trans_rollback();
+		$this->db->transRollback();
 		$message = empty($message)?"an error occured while saving information":$message;
 		echo createJsonMessage('status',false,'message',$message);
 		// $this->log($model,"unable to insert $model information");
@@ -590,14 +590,14 @@ class ModelController extends CI_Controller
 
 	private function updateSingle($model,$id,$method,$filter,$flagAction=false){
 		$this->modelCheck($model,'u');
-		$this->load->model("entities/$model");
+		$newModel = loadClass("$model");
 		$filter = (bool)$filter;
-		$data = $this->input->post(null,$filter);
+		$data = $this->request->post(null);
 		unset($data["edu-submit"],$data["edu-reset"]);
 		$data = $this->processFormUpload($model,$data,$id);
 		//pass in the value needed by the model itself and discard the rest.
-		$parameter = $this->extractSubset($data,$model);
-		$this->db->trans_begin();
+		$parameter = $this->extractSubset($data,$newModel);
+		$this->db->transBegin();
 		if ($this->validateModelData($model,'update',$parameter,$message) ) {
 			// check if date_modified is part of the entity
 			$labelArray = array_keys($model::$labelArray);
@@ -611,9 +611,9 @@ class ModelController extends CI_Controller
 				$parameter[$dateParam[1]] = date('Y-m-d H:i:s');
 			}
 
-			$this->$model->setArray($parameter);
-			if (!$this->$model->update($id,$this->db)) {
-				$this->db->trans_rollback();
+			$this->$newModel->setArray($parameter);
+			if (!$this->$newModel->update($id,$this->db)) {
+				$this->db->transRollback();
 				// $message="cannot perform update";
 				$arr['status']=false;
 		        $arr['message']= 'cannot perform update';
@@ -621,14 +621,12 @@ class ModelController extends CI_Controller
 		        	$arr['flagAction'] = $flagAction;
 		        }
 		        echo json_encode($arr);
-				 // echo createJsonMessage('status',false,'message',$message);
 				return ;
 			}
 			$data['ID']=$id;
 			if($this->DoAfterInsertion($model,'update',$data,$this->db,$message,$redirect)){
-				$this->db->trans_commit();
+				$this->db->transCommit();
 				if($redirect != ''){
-					// echo createJsonMessage('status',true,'message',$redirect);
 					$arr = array();
 					$arr['status'] = true;
 					$arr['message'] = $redirect;
@@ -642,31 +640,27 @@ class ModelController extends CI_Controller
 		        	$arr['flagAction'] = $flagAction;
 		        }
 		        echo json_encode($arr);
-
-				// echo createJsonMessage('status',true,'message',$message);
 				return;
 			}
 			else{
-				$this->db->trans_rollback();
+				$this->db->transRollback();
 				$arr['status']=false;
 		        $arr['message']= $message;
 		        if($flagAction){
 		        	$arr['flagAction'] = $flagAction;
 		        }
 		        echo json_encode($arr);
-				 // echo createJsonMessage('status',false,'message',$message);
 				return;
 			}
 		}
 		else{
-			$this->db->trans_rollback();
+			$this->db->transRollback();
 			$arr['status']=false;
 	        $arr['message']= $message;
 	        if($flagAction){
 	        	$arr['flagAction'] = $flagAction;
 	        }
 	        echo json_encode($arr);
-			 // echo createJsonMessage('status',false,'message',$message);
 			return;
 		}
 	}
@@ -682,8 +676,8 @@ class ModelController extends CI_Controller
 		}
 
 		$this->modelCheck($model,'d');
-		$this->load->model("entities/$model");
-		if ($this->$model->delete($id)) {
+		$newModel = loadClass("$model");
+		if ($this->$newModel->delete($id)) {
 			echo createJsonMessage('status',true,'message','information deleted successfully');
 		}
 		else{
@@ -691,10 +685,6 @@ class ModelController extends CI_Controller
 		}
 	}
 	private function modelCheck($model,$method){
-		// if (!isset($_POST["edu-submit"])) {
-		// 	echo createJsonMessage('status',false,'message','error occured while deleting information');
-		// 	exit;
-		// }
 		if (!$this->isModel($model)) {
 			echo createJsonMessage('status',false,'message','error occured while deleting information');
 			exit;
@@ -707,15 +697,15 @@ class ModelController extends CI_Controller
 	}
 	//this function checks if the argument id actually  a model
 	private function isModel($model){
-		$this->load->model("entities/$model");
-		if (!empty($model) && $this->$model instanceof Crud) {
+		$model = loadClass("$model");
+		if (!empty($model) && $model instanceof Crud) {
 			return true;
 		}
 		return false;
 	}
 	//check that the algorithm fit and that required data are not empty
 	private function validateModel($model,&$message){
-		return $this->$model->validateInsert($message);
+		return $model->validateInsert($message);
 	}
 		//function to extract a subset of fields from a particular field
 	private function extractSubset($array, $model){
@@ -723,7 +713,7 @@ class ModelController extends CI_Controller
 		//take care of user upload substitute the necessary value for the username
 		//dont specify username directly
 		$result =array();
-		if ($this->$model instanceof $this->crud) {
+		if ($model instanceof $this->crudNameSpace) {
 			$keys = array_keys($model::$labelArray);
 			$valueKeys = array_keys($array);
 			$temp =array_intersect($valueKeys, $keys);
@@ -752,15 +742,15 @@ class ModelController extends CI_Controller
 		if (empty($model)) {
 			show_404();exit;
 		}
-		loadClass($this->load,$model);
-		if (!is_subclass_of($this->$model, 'Crud')) {
+		$model = loadClass("$model");
+		if (!is_subclass_of($this->$model, $this->crudNameSpace)) {
 			show_404();exit;
 		}
 		$exception = null;
 		if (isset($_GET['exc'])) {
 			$exception = explode('-', $_GET['exc']);
 		}
-		$this->$model->downloadTemplate($exception);
+		$model->downloadTemplate($exception);
 	}
 	function export($model){
 		$condition = null;
@@ -774,72 +764,11 @@ class ModelController extends CI_Controller
 		if (empty($model)) {
 			show_404();exit;
 		}
-		loadClass($this->load,$model);
-		if (!is_subclass_of($this->$model, 'Crud')) {
+		$model = loadClass("$model");
+		if (!is_subclass_of($this->$model, $this->crudNameSpace)) {
 			show_404();exit;
 		}
-		$this->$model->export($condition);
-	}
-
-	public function upload_timestamp(){
-		if(empty($_FILES)){
-			$param = array('status'=>false,'message'=>'Please choose a file to upload','backLink'=>$_SERVER['HTTP_REFERER'],'model'=>'timestamp');
-			$this->load->view('uploadreport',$param);return;
-		}
-
-		$filePath = 'uploads/timestamp/';
-		if (!is_dir($filePath)) {
-			mkdir($filePath,0777,true);
-		}
-
-		$filePath.='timestamp_perm_'.date('Y-m-d h-i-s').'.csv';
-		$content = $this->loadUploadedFileContent($filePath,'time-upload');
-		$content = trim($content);
-		$array = stringToCsv($content);
-		$insertString='';
-
-		$countOrder = 1;
-		$countArr = count($array);
-		foreach ($array as $key => $value) {
-			$currentRow = $value[0];
-			$timeOrder = $countOrder;
-			if ($insertString) {
-				$insertString.=',';
-			}
-			$insertString.=" ('$currentRow',STR_TO_DATE('$currentRow','%H:%i:%s'),'$timeOrder')";
-			$countOrder++;
-		}
-
-		// for($i = 0; $i < $countOrder; $i++){
-		// 	$currentRow = $array[$i][0];
-		// 	// print_r($currentRow);exit;
-		// 	$timeOrder = $countOrder;
-		// 	if ($insertString) {
-		// 		$insertString.=',';
-		// 	}
-		// 	$insertString.=" ('$currentRow',STR_TO_DATE('$currentRow','%H:%i:%s'),'$timeOrder')";
-		// 	$countOrder++;
-		// }
-
-		if ($insertString==false) {
-			$param = array('status'=>false,'message'=>"no data available for insertion",'backLink'=>$_SERVER['HTTP_REFERER'],'model'=>'timestamp');
-			$this->load->view('uploadreport',$param);return;
-		}
-
-		$query ="insert ignore into timestamp_perm(time_stamp_perm, time_stamp_in_24,time_order) values $insertString on duplicate key update time_stamp_perm = values(time_stamp_perm)";
-		$result = $this->db->query($query);
-		if (!$result) {
-			$this->trans_rollback();
-			$param = array('status'=>false,'message'=>"no data available for insertion",'backLink'=>$_SERVER['HTTP_REFERER'],'model'=>'timestamp');
-			$this->load->view('uploadreport',$param);return;
-		}
-
-		$param = array('status'=>true,'message'=>'You have successfully uploaded the timestamp','backLink'=>$_SERVER['HTTP_REFERER'],'model'=>'timestamp');
-		if ($this->webSessionManager->getCurrentuserProp('user_type')=='admin') {
-			$param['canView']=$this->getAdminSidebar();
-		}
-		$this->db->trans_commit();
-		$this->load->view('uploadreport',$param);
+		$model->export($condition);
 	}
 
 	private function loadUploadedFileContent($filePath=false,$filename=''){
@@ -864,15 +793,16 @@ class ModelController extends CI_Controller
 		}
 	}
 
-	private function getAdminSidebar()
-	{
-		$this->load->model('custom/adminData');
-		loadClass($this->load,'admin');
-		$admin = new Admin();
-		$admin->ID= $this->webSessionManager->getCurrentuserProp('user_table_id');
-		$admin->load();
-		$role = $admin->role;
-		return $this->adminData->getCanViewPages($role);
-	}
+	// private function getAdminSidebar()
+	// {
+	// 	$this->load->model('custom/adminData');
+
+	// 	loadClass($this->load,'admin');
+	// 	$admin = new Admin();
+	// 	$admin->ID= $this->webSessionManager->getCurrentuserProp('user_table_id');
+	// 	$admin->load();
+	// 	$role = $admin->role;
+	// 	return $this->adminData->getCanViewPages($role);
+	// }
 
 }
