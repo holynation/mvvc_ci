@@ -12,7 +12,7 @@ use App\Models\ModelControllerDataValidator;
 
 class Modelcontroller extends BaseController
 {
-	private $_rootUploadsDirectory = "uploads/";
+	private $_rootUploadsDirectory = "writable/uploads/";
 	// RULE: date_created comes first,then date_modified or any named date
 	// NOTE: it only accept two diff date,nothing more than that.
 	private $_dateParam = array('company_device'=> array('date_created','date_updated'), 'default' => array('date_created','date_modified'));
