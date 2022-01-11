@@ -13,12 +13,11 @@ class Crud
 	private $entitiesNameSpace = 'App\Entities\\';
 	function __construct($array=array())
 	{
-		// parent::__construct();
+		helper(['string','text']);
 		if (!is_array($array)) {
 			throw new \Exception("Constructor argument must be an array");
 		}
 		$this->array = $array;
-		helper(['string','text']);
 		static::$baseurl = base_url();
 		$this->db = db_connect();
 	}
@@ -555,7 +554,7 @@ class Crud
 		}
 		$query.=") VALUES (";
 		$query.=$partTwo.")";
-		$result = $this->query($query,$this->array,$dbObject);
+		$result = $this->query($query,$data,$dbObject);
 		if ($result > 0) {
 			return true;
 		}
