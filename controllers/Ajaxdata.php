@@ -2,28 +2,30 @@
 	/**
 	* model for loading extra data needed by pages through ajax
 	*/
-	class AjaxData extends CI_Controller
+	namespace App\Controllers;
+
+	use App\Models\WebSessionManager;
+
+	class Ajaxdata extends BaseController
 	{
+		private $db;
+		private $webSessionManager;
 
 		function __construct()
-		{
-			parent::__construct();
-			$this->load->model("modelFormBuilder");
-			$this->load->database();
-			$this->load->model('webSessionManager');
-			// $this->load->model('entities/application_log');
-			$this->load->helper('string');
-			$this->load->helper('array');
-			$this->load->helper('date');
-			if (!$this->webSessionManager->isSessionActive()) {
-				echo "session expired please re login to continue";
-				exit;
-			}
+		{			
+			helper(['string']);
+			$this->db = db_connect();
+			$this->webSessionManager = new WebSessionManager;
+
+			// if (!$this->webSessionManager->isSessionActive()) {
+			// 	echo "session expired please re login to continue";
+			// 	exit;
+			// }
 			$exclude=array('changePassword','savePermission','approve','disapprove');
 			$page = $this->getMethod($segments);
 			if ($this->webSessionManager->getCurrentUserProp('user_type')=='admin' && in_array($page, $exclude)) {
-				loadClass($this->load,'role');
-				$this->role->checkWritePermission();
+				$role = loadClass('role');
+				$role->checkWritePermission();
 			}
 		}
 
@@ -40,8 +42,8 @@
 		private function returnJSONTransformArray($query,$data=array(),$valMessage='',$errMessage=''){
 			$newResult=array();
 			$result = $this->db->query($query,$data);
-			if($result->num_rows() > 0){
-				$result = $result->result_array();
+			if($result->getNumRows() > 0){
+				$result = $result->getResultArray();
 				if($valMessage != ''){
 					$result[0]['value'] = $valMessage;
 				}
@@ -67,8 +69,8 @@
 
 		protected function returnJsonFromQueryResult($query,$data=array(),$valMessage='',$errMessage=''){
 			$result = $this->db->query($query,$data);
-			if ($result->num_rows() > 0) {
-				$result = $result->result_array();
+			if ($result->getNumRows() > 0) {
+				$result = $result->getResultArray();
 				if($valMessage != ''){
 					$result[0]['value'] = $valMessage;
 				}
@@ -92,12 +94,12 @@
 				if (!$role) {
 					echo createJsonMessage('status',false,'message','error occured while saving permission','flagAction',false);
 				}
-				loadClass($this->load,'role');
+				$role = loadClass('role');
 				try {
 					$removeList = json_decode($_POST['remove'],true);
 					$updateList = json_decode($_POST['update'],true);
-					$this->role->ID=$role;
-					$result=$this->role->processPermission($updateList,$removeList);
+					$role->ID=$role;
+					$result=$role->processPermission($updateList,$removeList);
 					echo createJsonMessage('status',$result,'message','permission updated successfully','flagAction',true);
 				} catch (Exception $e) {
 					echo createJsonMessage('status',false,'message','error occured while saving permission','flagAction',false);
