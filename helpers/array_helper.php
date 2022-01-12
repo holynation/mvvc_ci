@@ -335,6 +335,22 @@ function removeValue($arr,$val)
 	}
 	return $result;
 }
+function array_values_recursive($array)
+{
+	$arrayValues = array();
+	foreach ($array as $value)
+	{
+	    if (is_scalar($value) OR is_resource($value))
+	    {
+	        $arrayValues[] = $value;
+	    }
+	    elseif (is_array($value))
+	    {
+	        $arrayValues = array_merge($arrayValues, array_values_recursive($value));
+	    }
+	}
+	return $arrayValues;
+}
 
 function listAPIEntities($db)
 {
