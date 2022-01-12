@@ -17,7 +17,7 @@ if (file_exists(SYSTEMPATH . 'Config/Routes.php')) {
  * --------------------------------------------------------------------
  */
 $routes->setDefaultNamespace('App\Controllers');
-$routes->setDefaultController('Api');
+$routes->setDefaultController('Insurance');
 $routes->setDefaultMethod('index');
 $routes->setTranslateURIDashes(false);
 $routes->set404Override();
@@ -31,7 +31,7 @@ $routes->setAutoRoute(false);
  
 // We get a performance increase by specifying the default
 // route since we don't have to scan directories.
-$routes->get('/', 'Api::index');
+$routes->get('/', 'Insurance::index');
 
 // The route for the application mobile API is here
 $routes->group('api',['filter'=>'apiAuth'], function($routes){
@@ -42,41 +42,48 @@ $routes->group('api',['filter'=>'apiAuth'], function($routes){
 
 // The route for normal operations for the backend
 $routes->group('vc/create',function($routes){
-    $routes->add('(:any)', 'ViewController::create/$1');
-    $routes->add('(:any)/(:any)', 'ViewController::create/$1/$2');
-    $routes->add('(:any)/(:any)/(:any)', 'ViewController::create/$1/$2/$3');
-    $routes->add('(:any)/(:any)/(:any)/(:any)', 'ViewController::create/$1/$2/$3/$4');
+    $routes->add('(:any)', 'Viewcontroller::create/$1');
+    $routes->add('(:any)/(:any)', 'Viewcontroller::create/$1/$2');
+    $routes->add('(:any)/(:any)/(:any)', 'Viewcontroller::create/$1/$2/$3');
+    $routes->add('(:any)/(:any)/(:any)/(:any)', 'Viewcontroller::create/$1/$2/$3/$4');
 });
 
 $routes->group('vc', function($routes){
-    $routes->add('resetPassword/(:any)','ViewController::resetPassword/$1');
-    $routes->add('changePassword','ViewController::changePassword');
-    $routes->add('changePassword/(:any)','ViewController::changePassword/$1');
-    $routes->add('(:any)','ViewController::view/$1');
-    $routes->add('(:any)/(:any)','ViewController::view/$1/$2');
-    $routes->add('(:any)/(:any)/(:any)','ViewController::view/$1/$2/$3');
+    $routes->add('resetPassword/(:any)','Viewcontroller::resetPassword/$1');
+    $routes->add('changePassword','Viewcontroller::changePassword');
+    $routes->add('changePassword/(:any)','Viewcontroller::changePassword/$1');
+    $routes->add('(:any)','Viewcontroller::view/$1');
+    $routes->add('(:any)/(:any)','Viewcontroller::view/$1/$2');
+    $routes->add('(:any)/(:any)/(:any)','Viewcontroller::view/$1/$2/$3');
 });
 
 $routes->group('mc', function($routes){
-    $routes->add('(:any)','ModelController::view/$1');
-    $routes->add('(:any)/(:any)','ModelController::view/$1/$2');
-    $routes->add('(:any)/(:any)/(:any)','ModelController::view/$1/$2/$3');
-    $routes->add('(:any)/(:any)/(:any)/(:any)','ModelController::view/$1/$2/$3/$4');
-    $routes->add('(:any)/(:any)/(:any)/(:any)/(:any)','ModelController::view/$1/$2/$3/$4/$5');
+    $routes->add('(:any)','Modelcontroller::view/$1');
+    $routes->add('(:any)/(:any)','Modelcontroller::view/$1/$2');
+    $routes->add('(:any)/(:any)/(:any)','Modelcontroller::view/$1/$2/$3');
+    $routes->add('(:any)/(:any)/(:any)/(:any)','Modelcontroller::view/$1/$2/$3/$4');
+    $routes->add('(:any)/(:any)/(:any)/(:any)/(:any)','Modelcontroller::view/$1/$2/$3/$4/$5');
 });
 
 $routes->group('ac', function($routes){
-    $routes->add('(:any)','ActionController/$1');
-    $routes->add('(:any)/(:any)','ActionController/$1/$2');
-    $routes->add('(:any)/(:any)/(:any)','ActionController/$1/$2/$3');
+    $routes->add('(:any)','Actioncontroller/$1');
+    $routes->add('(:any)/(:any)','Actioncontroller/$1/$2');
+    $routes->add('(:any)/(:any)/(:any)','Actioncontroller/$1/$2/$3');
 });
 
-$routes->add('delete/(:any)/(:any)','ActionController::delete/$1/$2');
-$routes->add('delete/(:any)/(:any)/(:any)','ActionController::delete/$1/$2/$3');
-$routes->add('truncate/(:any)','ActionController::truncate/$1');
+$routes->add('delete/(:any)/(:any)','Actioncontroller::delete/$1/$2');
+$routes->add('delete/(:any)/(:any)/(:any)','Actioncontroller::delete/$1/$2/$3');
+$routes->add('truncate/(:any)','Actioncontroller::truncate/$1');
+$routes->add('edit/(:any)/(:any)','Actioncontroller::edit/$1/$2');
 
-$routes->add('edit/(:any)/(:any)','ActionController::edit/$1/$2');
+$routes->add('account/verify/(:any)/(:any)/(:any)','Auth::verify/$1/$2/$3');
+$routes->add('register','Auth::signup');
+$routes->add('login','Auth::login');
+$routes->add('logout','Auth::logout');
+$routes->add('forget_password','Auth::forget');
+$routes->add('auth/web','Auth::web');
 
+$routes->add('admin/dashboard','ViewController::view/admin/dashboard');
 
 
 
