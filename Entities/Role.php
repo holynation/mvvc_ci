@@ -3,6 +3,7 @@
 namespace App\Entities;
 
 use App\Models\Crud;
+
 class Role extends Crud
 {
 	protected static $tablename='Role';
@@ -28,7 +29,7 @@ class Role extends Crud
 	function __construct($array=array())
 	{
 		parent::__construct($array);
-		$this->createSuperUser();
+		// $this->createSuperUser();
 	}
 	function getRole_titleFormField($value=''){
 		return "<div class='form-group'>
@@ -67,10 +68,10 @@ class Role extends Crud
 		if (empty($result)) {
 			return false;
 		}
-		$admin = 'App\Entities\Admin';
+		require_once('Admin.php');
 		$resultobjects = array();
 		foreach ($result as  $value) {
-			$resultObjects[] = new $admin($value);
+			$resultObjects[] = new \App\Entities\Admin($value);
 		}
 
 		return $resultObjects;
@@ -85,10 +86,10 @@ class Role extends Crud
 		if (empty($result)) {
 			return false;
 		}
-		$permission = 'App\Entities\Permission';
+		require_once('Permission.php');
 		$resultobjects = array();
 		foreach ($result as  $value) {
-			$resultObjects[] = new $permission($value);
+			$resultObjects[] = new \App\Entities\Permission($value);
 		}
 
 		return $resultObjects;
@@ -138,7 +139,7 @@ class Role extends Crud
 		foreach ($update as $value) {
 			$path = $db->escape($value['path']);
 			$permission = $db->escape($value['permission']);
-			$additional.=$additional?",($id,'$path','$permission')":"($id,'$path','$permission')";
+			$additional.=$additional?",($id,$path,$permission)":"($id,$path,$permission)";
 		}
 		if (!$additional) {
 			return false;
@@ -161,7 +162,7 @@ class Role extends Crud
 	{
 		$db = db_connect();
 		$path = $db->escape($path);
-		$query="select * from permission where role_id=? and '$path' like concat('%',path,'%')";
+		$query="select * from permission where role_id=? and $path like concat('%',path,'%')";
 		$result = $this->query($query,[$this->ID]);
 		return $result;
 	}
@@ -170,7 +171,7 @@ class Role extends Crud
 	{
 		$db = db_connect();
 		$path = $db->escape_string($path);
-		$query="select * from permission where role_id=? and '$path' like concat('%',path,'%') and permission='w'";
+		$query="select * from permission where role_id=? and $path like concat('%',path,'%') and permission='w'";
 		$result = $this->query($query,[$this->ID]);
 		return $result;
 	}
