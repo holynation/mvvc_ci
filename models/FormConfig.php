@@ -3,10 +3,16 @@
 * this class help save the configuration needed by the form in order to use a single file for all the form code.
 * you only need to include the configuration data that matters. the default value will be substituted for other configuration value that does not have a key  for a particular entity.
 */
-class FormConfig extends CI_Model
+namespace App\Models;
+
+use CodeIgniter\Model;
+use App\Models\WebSessionManager;
+
+class FormConfig extends Model
 {
-	private  $insertConfig=array();
+	private $insertConfig=[];
 	private $updateConfig;
+	private $webSessionManager;
 	public $currentRole;
 	
 	function __construct($currentRole=false)
@@ -16,6 +22,7 @@ class FormConfig extends CI_Model
 			$this->buildInsertConfig();
 			$this->buildUpdateConfig();
 		}
+		$this->webSessionManager = new WebSessionManager;
 		
 	}
 
@@ -115,7 +122,7 @@ class FormConfig extends CI_Model
 	private function buildUpdateConfig()
 	{
 		$userType = $this->webSessionManager->getCurrentUserProp('user_type');
-		$exclude = array();
+		$exclude = [];
 		if($userType == 'customer'){
 			$exclude = array('email','customer_path');
 		}

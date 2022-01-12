@@ -2,7 +2,12 @@
 /**
 * The model for generating table view for any model
 */
-class TableWithHeaderModel extends CI_Model
+namespace App\Models;
+
+use CodeIgniter\Model;
+use App\Models\TableActionModel;
+
+class TableWithHeaderModel extends Model
 {
 	private $uploadedFolderName = 'uploads'; // this name should be constant and not change at all
 	private $modelFolderName= 'entities';
@@ -12,24 +17,27 @@ class TableWithHeaderModel extends CI_Model
 	public $export=false;
 
 	private $_model = null;
+	private $_modelObj = null;
 	private $_header = null;
 	private $_result;
 	private $_paged = false;
 	private $_start = 0;
 	private $_length = null;
-	private $_actionArray = null;
-	private $_exclusionArray = null;
+	private $_actionArray = [];
+	private $_exclusionArray = [];
+	private $_tableAttr = [];
 	private $_icon='';
 	private $_exlcudeSerialNumber = false;
+	private $crudNameSpace = 'App\Models\Crud';
+	private $entitiesNameSpace = 'App\Entities\\';
+	private $tableActionModel;
+	protected $db;
 
 	function __construct()
 	{
-		parent::__construct();
-		$this->load->model('crud');
-		$this->load->model('tableActionModel');
-		$this->load->helper('string');
-		$this->load->helper('download');
-		$this->load->helper('file');
+		$this->tableActionModel = new TableActionModel;
+		$this->db = db_connect();
+		helper(['string','filesystem']);
 	}
 	//create  a method that load the table based on the specified paramterr
 	/**
@@ -37,50 +45,50 @@ class TableWithHeaderModel extends CI_Model
 	*the $model parameter is the name of the model to generate table view for
 	*$page variable paging ability is included as a part of the generated html
 	*/
-	public function loadExportTable($model,$data)
+	public function loadExportTable(string $model,$data)
 	{
 		$res =array2csv($data);
 	  	sendDownload($res,'text/csv',$model.'.csv');exit;
 	}
 	/**
-	* $model is the name of the class to load , data is the list of object you want to display as table.
+	* data is the list of object you want to display as table.
 	*/
-	public function convertToTable($model,$data,&$message='',$exclusionArray=array(),$action=null,$paged= true,$start=0,$length=NULL){
-		loadClass($this->load,$model);
-		return $this->loadTable($model,$data,$message='',$exclusionArray,$action,$paged,$start,$length);
+	public function convertToTable($data,&$message='',$start=0,$length=NULL){
+		return $this->loadTable($this->_model,$data,$message='',$start,$length);
 	}
 
-	public function openTableHeader($model,$attr=array(),$exclusionArray=array(),$removeId = true){
-		loadClass($this->load,$model);
+	public function openTableHeader(string $model,$attr=array(),$exclusionArray=array(),$removeId = true){
 		if(empty($model)){
-			throw new Exception("The model parameter can't be empty...");
+			throw new \Exception("The model parameter can't be empty...");
 		}
-		$this->_model = $model;
-		$this->_exclusionArray = (is_array($exclusionArray)) ? $exclusionArray : null;
-		$this->_header = $this->getHeader($model,$exclusionArray,$removeId);
+		// setting the model and it instantiated class
+		$this->_model = $model; // the real model name
+		$this->_modelObj = loadClass("$model"); // the model class object
+
+		$this->_exclusionArray = (is_array($exclusionArray)) ? $exclusionArray : [];
+		$this->_tableAttr = !empty($attr) ? $attr : [];
+		$this->_header = $this->getHeader($exclusionArray,$removeId);
 		$this->_result .= $this->openTable($attr);
 		return $this;
 	}
 
 	public function appendTableAction($action = null){
 		if(empty($this->_header)){
-			throw new Exception("You must initiate the model header.");
+			throw new \Exception("The model header can't be empty.");
 		}
 		$this->_actionArray = $action===null?$this->_model::$tableAction:$action;
 		$this->_result.=$this->generateheader($this->_header,$this->_actionArray);
-		// print_r($this->_result);exit;
 		return $this;
 	}
 
-	public function generateTableBody($message=null,$resolve=true,$start=0,$length=500,$sort=' order by ID desc ',$where=''){
+	public function generateTableBody($message=null,$resolve=true,$start=0,$length=100,$sort=' order by ID desc ',$where=''){
 		//use get function for the len and the start index for the sorting
 		$this->_start = (isset($_GET['p_start'])&& is_numeric($_GET['p_start']) )?(int)$_GET['p_start']:$start;
 		$this->_length = (isset($_GET['p_len'])&& is_numeric($_GET['p_len']) )?(int)$_GET['p_len']:$length;
-		$model = $this->_model;
+		$modelObj = $this->_modelObj;
 		$icon = ($this->_icon) ? $this->_icon : "";
-		$data = $this->$model->all($message,$resolve,$this->_start,$this->_length,$sort,$where);
-
-		$this->_result.=$this->generateBody($this->_model,$data,$this->_exclusionArray,$this->_actionArray,$icon);
+		$data = $modelObj->all($message,$resolve,$this->_start,$this->_length,$sort,$where);
+		$this->_result.=$this->generateBody($data,$this->_exclusionArray,$this->_actionArray,$icon);
 		return $this;
 	}
 
@@ -94,12 +102,13 @@ class TableWithHeaderModel extends CI_Model
 
 	public function generate(){
 		if(empty($this->_result)){
-			throw new Exception("The result object is empty");
+			throw new \Exception("The result object is empty");
 		}
 		$this->_result .= $this->closeTable();
 		$countAll='';
 		if($this->_paged){
-			$countAll = $this->db->count_all($this->_model);
+			$builder = $this->db->table($this->_model);
+			$countAll = $builder->countAll();
 		}
 
 		if ($this->_paged && $countAll > $this->_length) {
@@ -112,50 +121,47 @@ class TableWithHeaderModel extends CI_Model
 		return $result;
 	}
 
-	private function loadTable($model,$data,$totalRow,$exclusionArray,$action,$paged,$start,$length,$removeId=true,$tableAttr=array()){
+	private function loadTable(string $model,$data,$totalRow,$start,$length,$removeId=true){
 		if (!$this->validateModelNameAndAccess($model)) {
 			return false;
 		}
-		$actionArray = $action===null?$model::$tableAction:$action;
-		$documentField =$model::$documentField;
-		// $totalRow=0;
 		if (empty($data) || $data==false) {
 			$link = base_url("vc/$model/create");
-			return "<div class='alert alert-info text-dark' style='margin:0 auto;'>".
-				$this->lang->line('no_record_found').
-			"</div>";
+			return "<div class='alert alert-info text-dark' style='margin:0 auto;'>NO RECORD FOUND</div>";
 		}
-		$header = $this->getHeader($model,$exclusionArray,$removeId);
-		$result=$this->openTable($tableAttr);
-		$result.=$this->generateheader($header,$action);
-		$result.=$this->generateTableBody($model,$data,$exclusionArray,$actionArray);
+		$header = $this->getHeader($this->_exclusionArray,$removeId);
+		$result=$this->openTable($this->_tableAttr);
+		$result.=$this->generateheader($header,$this->_actionArray);
+		$result.=$this->generateBody($data);
 		$result.=$this->closeTable();
 
-		// $size = $length?$length:$this->defaultPagingLength;
-		if ($paged && $totalRow > $length) {
+		if ($this->_paged && $totalRow > $length) {
 			$result.=$this->generatePagedFooter($totalRow,$start,$length);//for testing sake
 		}
+		$this->clearVar();
 		return $result;
 	}
+
 	// the multipleAction arg is for performing multiple action using checkbox
-	public function getTableHtml($model,&$message='',$exclusionArray=array(),$action=null,$paged= true,$start=0,$length=NULL,$resolve=true,$sort=' order by ID desc ',$where='',$tableAttr = array()){
-		loadClass($this->load,$model);
-		if ($paged) {
+	public function getTableHtml(&$message='',$start=0,$length=NULL,$resolve=true,$sort=' order by ID desc ',$where=''){
+		
+		$model = $this->_model;
+		$newModel = $this->_modelObj;
+		if ($this->_paged) {
 			$length = $length?$length:$this->defaultPagingLength;
 		}
 		//use get function for the len and the start index for the sorting
 		$start = (isset($_GET['p_start'])&& is_numeric($_GET['p_start']) )?(int)$_GET['p_start']:$start;
 		$length = (isset($_GET['p_len'])&& is_numeric($_GET['p_len']) )?(int)$_GET['p_len']:$length;
 
-		// $data = $this->export?$this->$model->allNonObject($message,$resolve,0,null,$sort):$this->$model->all($message,$resolve,$start,$length,$sort,$where);
-		$data = $this->$model->all($message,$resolve,$start,$length,$sort,$where);
+		$data = $newModel->all($message,$resolve,$start,$length,$sort,$where);
 
 		$countAll = ''; // using this to count all the records in the model
-		if($paged){
-			$countAll = $this->db->count_all($model);
+		if($this->_paged){
+			$builder = $this->db->table($model);
+			$countAll = $builder->countAll();
 		}
-		// return $this->export?$this->loadExportTable($model,$data):$this->loadTable($model,$data,$message,$exclusionArray,$action,$paged,$start,$length,true,$appendForm,$multipleAction);
-		return $this->export?$this->loadExportTable($model,$data):$this->loadTable($model,$data,$countAll,$exclusionArray,$action,$paged,$start,$length,true,$tableAttr);
+		return $this->export?$this->loadExportTable($model,$data):$this->loadTable($model,$data,$countAll,$start,$length,true);
 	}
 
 	//the action array will contain the 
@@ -231,7 +237,7 @@ class TableWithHeaderModel extends CI_Model
 		return $result;
 	}
 
-	private function openTable($attr = array()){
+	private function openTable(array $attr = array()){
 		$attr = (!empty($attr)) ? attrToString($attr) : "";
 		return "  <div class=\"box\"><div class=\"table-responsive no-padding\"><table $attr class='table'> \n";
 	}
@@ -246,7 +252,7 @@ class TableWithHeaderModel extends CI_Model
 		return $this;
 	}
 
-	private function generateBody($model,$data,$exclusionArray,$actionArray,$icon){
+	private function generateBody($data,$exclusionArray=array(),$actionArray=array(),$icon=''){
 		$result ='<tbody>';
 		if (empty($data) || $data==false) {
 			$countHeader = count($this->_header);
@@ -259,22 +265,22 @@ class TableWithHeaderModel extends CI_Model
 		$countData = count($data);
 		for ($i=0; $i < $countData; $i++) { 
 			$current= $data[$i];
-			$result.=$this->generateTableRow($model,$current,$exclusionArray,$actionArray,@$_GET['p_start']+$i);
+			$result.=$this->generateTableRow($current,$exclusionArray,$actionArray,@$_GET['p_start']+$i);
 		}
 		$result.='</tbody>';
 		return $result;
 	}
 
-	private function generateTableRow($model,$rowData,$exclusionArray,$actionArray,$index=false){
-		$result="<tr data-row-identifier='{$rowData->ID}' class='best-content' id='best-content'>";
+	private function generateTableRow($rowData,$exclusionArray,$actionArray,$index=false){
+		$id = $rowData->id;
+		$result="<tr data-row-identifier='{$id}' class='best-content' id='best-content'>";
 
 		// this is to add multiple checkbox functionality
-		// print_r($rowData);exit;
-		$id = $rowData->ID;
 		if ($index!==false && !$this->_exlcudeSerialNumber) {
 			$index+=1;
 			$result.="<td>$index</td>";
 		}
+		$model = $this->_modelObj;
 		$documentArray =array_keys($model::$documentField);
 		$labels = array_keys($model::$labelArray);
 		for ($i=0; $i <count($labels) ; $i++) { 
@@ -282,9 +288,7 @@ class TableWithHeaderModel extends CI_Model
 			if ($key=='ID' || in_array($key, $exclusionArray)) {
 				continue;
 			}
-
 			$value = $rowData->$key;
-		
 			if (!empty($documentArray) && in_array($key, $documentArray)) {
 				$link = 'javascript:void(0);';
 				$fileMsg = 'no image';
@@ -305,15 +309,6 @@ class TableWithHeaderModel extends CI_Model
 				}else{
 					$selector = $model . "_download_$id";
 					$value = "<a href='$link' target='_blank' id='$selector'>View</a>";
-					// $value .= "<script>
-					// 		\$(document).ready(function(){
-					// 			\$('td a[id={$selector}]').click(function(e){
-					// 				e.preventDefault();
-					// 				// console.log('hi');
-					// 				//force_download($link,NULL)
-					// 			});
-					// 		});
-					// </script>";
 				}
 			}
 
@@ -380,7 +375,6 @@ class TableWithHeaderModel extends CI_Model
 	 	if ($totalPage <= $pageLength) {
 	 		return;
 	 	}
-	 	// $links = base_url('');
 		$result="<div class='paging'>
 		<div>
 			<div class='form_group'>
@@ -474,6 +468,7 @@ class TableWithHeaderModel extends CI_Model
 		}
 		return $result;
 	}
+
 	//create another method to generate the needed javascript file for the paging this can be called independently of the getTableHtml function
 	//this functin basically generates the javascript file needed to process  the action as well as the paging function search functionality will also be included automatically
 
@@ -481,8 +476,12 @@ class TableWithHeaderModel extends CI_Model
 
 	}
 
-	private function getHeader($model,$exclusionArray,$removeid){
+	private function getHeader($exclusionArray=array(),$removeid){
 		$result = array();
+		if(!$this->_model){
+			throw new \Exception("You must set the model by calling the openTableHeader method.");
+		}
+		$model = $this->entitiesNameSpace.ucfirst($this->_model);
 		$labels = $model::$labelArray;
 		foreach ($labels as $key => $value) {
 			if ($key=='ID' || in_array($key, $exclusionArray)) {//dont include the header if its an id field or
@@ -505,15 +504,15 @@ class TableWithHeaderModel extends CI_Model
 	private function validateModelNameAndAccess($modelname){
 		$message='';
 		if (empty($modelname)) {
-			throw new Exception($this->lang->line('no_model')); 
+			throw new \Exception("Empty model name not allowed"); 
 			return false;
 		}
-		if (!is_subclass_of($this->$modelname, 'Crud')) {
-			throw new Exception($this->lang->line('no_model_crud'));
+		if (!is_subclass_of($this->entitiesNameSpace.ucfirst($modelname), $this->crudNameSpace)) {
+			throw new \Exception("Model is not a crud: make sure the correct name of the model is entered");
 			return false;
 		}
 		if (!$this->validateAccess($modelname)) {
-			throw new Exception($this->lang->line('access_denied'));
+			throw new \Exception("Access Denied");
 			return false;
 		}
 		return true;
@@ -525,12 +524,15 @@ class TableWithHeaderModel extends CI_Model
 
 	private function clearVar(){
 		$this->_model = null;
+		$this->_modelObj = null;
 		$this->_header = null;
 		$this->_paged = false;
 		$this->_start = 0;
 		$this->_length = null;
-		$this->_actionArray = null;
-		$this->_exclusionArray = null;
+		$this->_icon = '';
+		$this->_actionArray = [];
+		$this->_exclusionArray = [];
+		$this->_tableAttr = [];
 	}
 }
 

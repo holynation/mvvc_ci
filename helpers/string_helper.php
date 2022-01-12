@@ -115,6 +115,7 @@
  		return makeHash(uniqid());
  	}
 
+<<<<<<< HEAD
  	function isValidEmail($string){
 		if(filter_var($string, FILTER_VALIDATE_EMAIL) == FALSE){
 			return false;
@@ -145,6 +146,12 @@
 	{
 		
 		$query="select * from customer where email=? or phone_number=?";
+=======
+	function isUniqueEmailAndPhone($scope,$email,$phone)
+	{
+		
+		$query="select * from client where email=? or phonenumber=?";
+>>>>>>> master
 		$result = $scope->query($query,array($email,$phone));
 		$result = $result->getResultArray();
 		return count($result)==0;
@@ -375,7 +382,11 @@
 	//function to save the page cookie
 	function sendPageCookie($module,$page){
 		$content = $module.'-'.$page;
+<<<<<<< HEAD
 		setcookie('daabo',$content,0,'/','',false,true);
+=======
+		setcookie('edu_per',$content,0,'/','',false,true);
+>>>>>>> master
 	}
 	function show_access_denied($loader){
 		$viewName = "App\\Views\\access_denied";
@@ -410,6 +421,7 @@
 		{
 			$atts = '';
 
+<<<<<<< HEAD
 			foreach ($attributes as $key => $val)
 			{
 				$atts .= ' '.$key.'="'.$val.'"';
@@ -438,6 +450,8 @@
 		return ($page != '') ? " $formatted " : " Daabo";
 	}
 
+=======
+>>>>>>> master
 	function getIDByName($scope,$table,$column,$value)
 	{
 		$query="select ID from $table where $column=?";
@@ -452,6 +466,7 @@
 	function rndEncode($data,$len=16){
 		return urlencode(base64_encode(randStrGen($len).$data));
 	}
+<<<<<<< HEAD
 
 	function rndDecode($data,$len=16){
 		$hash = base64_decode(urldecode($data));
@@ -585,6 +600,19 @@
 		return round(($diff*100),2);
 	}
 
+=======
+
+	function rndDecode($data,$len=16){
+		$hash = base64_decode(urldecode($data));
+		return substr($hash,$len);
+	}
+	
+	function refEncode($data=''){
+		// the ref code should not be more than 30 characters
+		return randStrGen(25);
+	}
+
+>>>>>>> master
 	function appConfig($mailKey){
     	$mailLink = array('salt'=>'_~2y~12~T31xd7x7b67FO', 'type' => array(1=>'verify_account',2=>'verify_success',3=>'forget',4=>'forget_success',5=>'2daysprior',6=>'subscription',7=>'suspension',8=>'plan_cancel',9=>'plan_change',10=>'renewed',11=>'new_browser',12=>'request_claims',13=>'payment_invoice',14=>'password_forget_token'),'company_name'=>'Daabo','company_address'=>'Lagos','company_email'=>'info@daabo.com','footer_link' => "Daabo.com");
 		return $mailLink[$mailKey];

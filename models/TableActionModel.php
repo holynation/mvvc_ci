@@ -2,15 +2,13 @@
 /**
 * model to manage table action information
 */
-class tableActionModel extends CI_Model
-{
-	
-	function __construct()
-	{
-		parent::__construct();
-	}
+namespace App\Models;
 
-		//function to generate the action link needed for the enable and disable field
+use CodeIgniter\Model;
+class TableActionModel extends Model
+{
+
+	//function to generate the action link needed for the enable and disable field
 	public function getEnabled($object,$classname=''){
 		$classname = empty($classname)?lcfirst(get_class($object)):ucfirst($classname);
 		$link = base_url("ac/disable/$classname");

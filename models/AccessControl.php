@@ -2,15 +2,20 @@
 /**
 * This class coontrols the user access to permission
 */
-class AccessControl extends CI_Model
-{
+namespace App\Models;
 
+use CodeIgniter\Model;
+use App\Models\WebSessionManager;
+use App\Entities\Permission;
+
+class AccessControl extends Model
+{
+	protected $db;
+	private $webSessionManager;
 	function __construct()
 	{
-		parent::__construct();
-		$this->load->model('entities/role');
-		$this->load->model('entities/permission');
-		$this->load->model('webSessionManager');
+		$this->webSessionManager = new WebSessionManager;
+		$this->db = db_connect();
 	}
 	//this function is equivalent to asking for a table access
 	//the first parameter is the name of the mmodel that is to be access, that is the name of the table
@@ -20,10 +25,11 @@ class AccessControl extends CI_Model
 		//check that theoperation is hust one sngle character.
 		$len = strlen($operation);
 		if ($len> 4) {
-			throw new Exception("invalid operation argument detected.");
+			throw new \Exception("invalid operation argument detected.");
 		}
 		$roleid = $this->webSessionManager->getCurrentUserProp('role_ID');
-		$result = $this->permission->getWhere(array('role_ID'=>$roleid,'module_name'=>$modulename));//this should return one result
+		$permission = loadClass('permission');
+		$result = $permission->getWhere(array('role_ID'=>$roleid,'module_name'=>$modulename));//this should return one result
 		$perm = $result[0]->privileges;
 		$pos = strpos($perm, $operation);
 		if ($pos== -1) {
@@ -31,56 +37,54 @@ class AccessControl extends CI_Model
 		}
 		return true;
 	}
-	// public function getCurrentUserRole(){
-	// 	$userid = $this->userdata('userid');
-	// 	return $this->role->getWhere(array('user_ID'=>$userid));
-	// }
+
 	//this funcntion create all the default roles used by the system
 	public function createDefaultRoles(){
-		$studentPermissionList = array();
-		$lecturerPermissionList =array();
-		$adminPermissionList = array();
-		$superuserPermissionList = array();
-		$this->db->trans_start();
+		$studentPermissionList = [];
+		$lecturerPermissionList = [];
+		$adminPermissionList = [];
+		$superuserPermissionList = [];
+		$this->db->transBegin();
 		if(!$this->createRole('student','assigned to all student users on the system',$studentPermissionList)){
-			$this->db->trans_rollback();
-			throw new Exception("Error occured while creating default role");
+			$this->db->transRollback();
+			throw new \Exception("Error occured while creating default role");
 
 		}//add the permission list
 		if(!$this->createRole('lecturer','assigned to all lecturer users on the system',$lecturerPermissionList)){
-			$this->db->trans_rollback();
-			throw new Exception("Error occured while creating default role");
+			$this->db->transRollback();
+			throw new \Exception("Error occured while creating default role");
 		}//add the permission list
 		if($this->createRole('superuser','assigned to system superuser',$superuserPermissionList)){
-			$this->db->trans_rollback();
-			throw new Exception("Error occured while creating default role");
+			$this->db->transRollback();
+			throw new \Exception("Error occured while creating default role");
 		}//add the permission list
 		if($this->createRole('admin','assigned to all admin users on the system',$adminPermissionList)){
-			$this->db->trans_rollback();
-			throw new Exception("Error occured while creating default role");
+			$this->db->transRollback();
+			throw new \Exception("Error occured while creating default role");
 		}//add the permission list
 		if($this->createRole('staff','assigned to all admin users on the system',$adminPermissionList)){
-			$this->db->trans_rollback();
-			throw new Exception("Error occured while creating default role");
+			$this->db->transRollback();
+			throw new \Exception("Error occured while creating default role");
 		}//add the permission list
-		$this->db->trans_commit();
+		$this->db->transCommit();
 		return true;
 	}
 
 	public function createRole($rolename,$description,$permissionList=null,$isDefault=0,$autoCommit=true){
-		$this->db->trans_start();//start transaction
+		$this->db->transBegin();//start transaction
 		$data=array('role_name'=>$rolename,'description'=>$description);
 
 		//check if the role already exist and skip
-		if ($this->role->exists()) {
+		$role = loadClass("role");
+		if ($role->exists()) {
 			return true;
 		}
 		$data['isDefault']=$isDefault;
-		$this->role->setArray($data);
-		if($this->role->insert($this->db)){
+		$role->setArray($data);
+		if($role->insert($this->db)){
 			if (is_null($permissionList)) {
 				if($autoCommit){
-					$this->db->trans_commit();
+					$this->db->transCommit();
 				}
 				return true;
 			}
@@ -88,12 +92,12 @@ class AccessControl extends CI_Model
 			$roleid = $this->getLastInsertId();
 			foreach ($permissionList as $modulename => $permission) {
 				if(!$this->addPermission($roleid,$modulename,$permission)){
-					$this->db->trans_rollback();
+					$this->db->transRollback();
 					return false;
 				}
 			}
 			if($autoCommit){
-				$this->db->trans_commit();
+				$this->db->transCommit();
 			}
 			return true;
 		}
@@ -108,7 +112,8 @@ class AccessControl extends CI_Model
 			return false;
 		}
 		$data = array('role_ID' =>$roleid ,'modulename'=>$module,'privileges'=>$permission);
-		$res = $this->permission->getWhere($data,$this->db);
+		$permission = loadClass("permission");
+		$res = $permission->getWhere($data,$this->db);
 		if ($res) {
 			$perm = $res[0]->privileges;
 			if (strpos($perm, $permission)!=-1) {
@@ -124,9 +129,8 @@ class AccessControl extends CI_Model
 
 		}
 		$data['description']=$description;
-		// print_r($data);exit;
-		$this->permission->setArray($data);
-		return $this->permission->insert($this->db);
+		$permission->setArray($data);
+		return $permission->insert($this->db);
 	}
 	private function validatePermissionString($permission){
 		$compareString = 'cdru';

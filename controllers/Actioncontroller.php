@@ -55,7 +55,8 @@
 
 		public function truncate($model){
 			if($model){
-				if($this->db->truncate($model)){
+				$builder = $this->db->table($model);
+				if($builder->truncate()){
 					echo createJsonMessage('status',true,'message',"item successfully truncated...",'flagAction',true);
 				}else{
 					echo createJsonMessage('status',false,'message',"cannot truncate item...",'flagAction',false);
