@@ -115,10 +115,43 @@
  		return makeHash(uniqid());
  	}
 
+<<<<<<< HEAD
+ 	function isValidEmail($string){
+		if(filter_var($string, FILTER_VALIDATE_EMAIL) == FALSE){
+			return false;
+		}
+		return true;
+	}
+	function getFirstString($str,$uppercase=false){
+	    if($str){
+	    	$value = substr($str, 0, 1);
+	        return ($uppercase) ? strtoupper($value) : strtolower($value);
+	    }
+	    return false;
+	}
+	function formatToNameLabel($string,$uppercase=false){
+		if(!$string) return '';
+		$splitName = explode(' ',$string);
+		if (count($splitName) <2) {
+			return getFirstString($string,$uppercase);
+		}else{
+			$firstname= $splitName[0];
+			$lastname = $splitName[1];
+			return getFirstString($firstname,$uppercase).''.getFirstString($lastname,$uppercase);
+		}
+		
+	}
+
+	function isUniqueEmailAndPhone($scope,$email,$phone)
+	{
+		
+		$query="select * from customer where email=? or phone_number=?";
+=======
 	function isUniqueEmailAndPhone($scope,$email,$phone)
 	{
 		
 		$query="select * from client where email=? or phonenumber=?";
+>>>>>>> master
 		$result = $scope->query($query,array($email,$phone));
 		$result = $result->getResultArray();
 		return count($result)==0;
@@ -349,7 +382,11 @@
 	//function to save the page cookie
 	function sendPageCookie($module,$page){
 		$content = $module.'-'.$page;
+<<<<<<< HEAD
+		setcookie('daabo',$content,0,'/','',false,true);
+=======
 		setcookie('edu_per',$content,0,'/','',false,true);
+>>>>>>> master
 	}
 	function show_access_denied($loader){
 		$viewName = "App\\Views\\access_denied";
@@ -376,7 +413,45 @@
 		$result = json_encode($param);
 		echo $result;
 	}
+	function formatToLocalCurrency($value=null){
+		return "&#8358;$value"; // this is a naira currency
+	}
+	function attrToString($attributes = array()){
+		if (is_array($attributes))
+		{
+			$atts = '';
 
+<<<<<<< HEAD
+			foreach ($attributes as $key => $val)
+			{
+				$atts .= ' '.$key.'="'.$val.'"';
+			}
+
+			return $atts;
+		}
+	}
+	function getCustomerOption($value=''){
+		$obj = &get_instance();
+		loadClass($obj->load,'customer');
+		return $obj->customer->getCustomerOption($value);
+	}
+	function getCompanyOption($value=''){
+		$obj = &get_instance();
+		loadClass($obj->load,'company');
+		return $obj->company->getCompanyOption($value);
+	}
+	function getUserOption($value=''){
+		$obj = &get_instance();
+		loadClass($obj->load,'user');
+		return $obj->user->getUserIdOption($value);
+	}
+	function getTitlePage($page = ''){
+		$formatted = " $page | Daabo ";
+		return ($page != '') ? " $formatted " : " Daabo";
+	}
+
+=======
+>>>>>>> master
 	function getIDByName($scope,$table,$column,$value)
 	{
 		$query="select ID from $table where $column=?";
@@ -391,6 +466,7 @@
 	function rndEncode($data,$len=16){
 		return urlencode(base64_encode(randStrGen($len).$data));
 	}
+<<<<<<< HEAD
 
 	function rndDecode($data,$len=16){
 		$hash = base64_decode(urldecode($data));
@@ -402,6 +478,141 @@
 		return randStrGen(25);
 	}
 
+	function generateHashRef($type=''){
+		$hash = "#".randStrGen(8).randStrGen(10).date("s"); //  the total should be 20 in character
+		$ref = randStrGen(10);
+		$result = array('receipt' => $hash,'reference' => $ref);
+		return $result[$type];
+	}
+
+	function checkRewardClaim($db,$user_id){
+		$sql  = "select user_id from claimed_reward where user_id=?";
+		$res = $db->query($sql,array($user_id));
+		return ($res->getNumRows() > 0) ? true : false;
+	}
+
+	function formatToDateOnly($dateTime){
+ 		$date = new DateTime($dateTime);
+		return $date->format('Y-m-d');
+ 	}
+
+ 	function isTimePassed($start,$end,$limit=30){
+		$expiration = "+$limit minutes";
+	  	$expTime = strtotime($expiration, $end);
+	  	if ($start <= $expTime){
+		    return false; // means the first is less than the second
+		}
+	   	return true;
+	}
+
+	function nextPaymentDate($date,$daysToAdd){
+		$date = new DateTime($date);
+		$interval = 'P'.$daysToAdd.'D';
+		$date->add(new DateInterval($interval));
+		return $date->format('Y-m-d H:i:s');
+	}
+	function dateFormatter($posted){
+ 		if($posted){
+ 			$date = strftime("%d %B, %Y", strtotime($posted));
+ 		    return $date;
+ 		}
+ 		return false;	
+ 	}
+	function dateTimeFormatter($posted,$hourFormat = 24){
+ 		if($posted){
+ 			$date = strftime("%d %b %Y", strtotime($posted));
+ 		    return $date .', '.localTimeRead($posted, $hourFormat);
+ 		}
+ 		return false;	
+ 	}
+ 	function dateFormatDevice($posted){
+ 		if($posted){
+ 			$date = strftime("%b %d, %Y", strtotime($posted));
+ 		    return $date;
+ 		}
+ 		return false;	
+ 	}
+
+	function formatDate(){
+        $d = new DateTime();
+        return $d->format("Y-m-d H:i:s");
+    }
+
+	function calc_size($file_size){
+		$_size = '';
+ 		$kb = 1024;
+		$mb = 1048576;
+ 		$gb = 1073741824;
+
+		if(empty($file_size)){
+		  	return '' ;
+		}
+
+	 	else if($file_size < $kb ) {
+	 		return $_size . "B";
+
+	 	}elseif($file_size > $kb AND $file_size < $mb ) {
+	 		$_size = round($file_size/$kb, 2);
+	 		return $_size . "KB";
+
+	 	}elseif($file_size >= $mb AND $file_size < $gb) {
+	 		$_size = round($file_size/$mb, 2);
+	 		return $_size . "MB";
+
+	 	}else if($file_size >= $gb ) {
+	 		$_size = round($file_size/$gb, 2);
+	 		return $_size . "GB";
+	 	}else{
+	 		return NULL;
+	 	}
+	}
+
+	// '%y Year %m Month %d Day %h Hours %i Minute %s Seconds'        =>  1 Year 3 Month 14 Day 11 Hours 49 Minute 36 Seconds
+	// '%y Year %m Month %d Day'                                    =>  1 Year 3 Month 14 Days
+	// '%m Month %d Day'                                            =>  3 Month 14 Day
+	// '%d Day %h Hours'                                            =>  14 Day 11 Hours
+	// '%d Day'                                                        =>  14 Days
+	// '%h Hours %i Minute %s Seconds'                                =>  11 Hours 49 Minute 36 Seconds
+	// '%i Minute %s Seconds'                                        =>  49 Minute 36 Seconds
+	// '%h Hours                                                    =>  11 Hours
+	// '%a Days                                                        =>  468 Days
+
+	function dateDiffFormat($date_1 , $date_2 , $differenceFormat = '%a' )
+	{
+	    $datetime1 = date_create($date_1);
+	    $datetime2 = date_create($date_2);
+	    $interval = date_diff($datetime1, $datetime2);
+	    return $interval->format($differenceFormat);
+	   
+	}
+
+	function localTimeRead($dateTime,$hourFormat = 24){
+		$format = ($hourFormat == 24) ? "G" : "g";
+		$date = date_create($dateTime);
+		return date_format($date, "$format:i a");
+	}
+
+	function calcPercentageDiff($startVal,$endVal){
+		// using percentage decrease formula
+		// percentage decrease = ((starting value-ending value)/starting value) * 100
+		// if ans is negative, it expresses a rate of increase, otherwise a decrease
+		$diff = (($startVal-$endVal)/$startVal);
+		return round(($diff*100),2);
+	}
+
+=======
+
+	function rndDecode($data,$len=16){
+		$hash = base64_decode(urldecode($data));
+		return substr($hash,$len);
+	}
+	
+	function refEncode($data=''){
+		// the ref code should not be more than 30 characters
+		return randStrGen(25);
+	}
+
+>>>>>>> master
 	function appConfig($mailKey){
     	$mailLink = array('salt'=>'_~2y~12~T31xd7x7b67FO', 'type' => array(1=>'verify_account',2=>'verify_success',3=>'forget',4=>'forget_success',5=>'2daysprior',6=>'subscription',7=>'suspension',8=>'plan_cancel',9=>'plan_change',10=>'renewed',11=>'new_browser',12=>'request_claims',13=>'payment_invoice',14=>'password_forget_token'),'company_name'=>'Daabo','company_address'=>'Lagos','company_email'=>'info@daabo.com','footer_link' => "Daabo.com");
 		return $mailLink[$mailKey];
